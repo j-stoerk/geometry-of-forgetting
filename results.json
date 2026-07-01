@@ -1,0 +1,23 @@
+{
+  "interference_linear_max_rel_err": 0.0,
+  "interference_nonlinear_corr": 0.9999999999920167,
+  "lossless_naive_forgetA": 13.937650462615098,
+  "lossless_alloc_forgetA": 5.064498476801204e-18,
+  "lossless_alloc_lossB": 13.93765046261729,
+  "lossless_naive_lossB": 4.1749134395298373e-17,
+  "floor_at_disjoint": -2.0316692725739413e-18,
+  "floor_at_full_overlap": 1.0,
+  "interference_at_full_overlap": 2.0,
+  "sign_change_s_star": 0.256973903659522,
+  "capacity_dims": [
+    16,
+    28,
+    40
+  ],
+  "capacity_rank": 2,
+  "capacity_final_resid": {
+    "16": 15.844413544480222,
+    "28": 5.354597697860007,
+    "40": -1.6698791851186786e-17
+  }
+}

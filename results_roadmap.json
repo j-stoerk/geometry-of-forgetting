@@ -1,0 +1,17 @@
+{
+  "feasibility_I_corr": 0.9925908885138054,
+  "feasibility_floor_vs_Iest_spearman": 0.9705882352941176,
+  "cheapgn_full": 0.9997201002416791,
+  "cheapgn_oja": 0.9578454406098751,
+  "cheapgn_fd": {
+    "6": 0.6011651088661712,
+    "12": 0.9996636163761841,
+    "18": 0.9997117819018008,
+    "24": 0.9997181507644853,
+    "36": 0.9997203769570472
+  },
+  "softknee_cap_at_T_hard": 40.0,
+  "softknee_cap_at_T_soft1": 7.694014167917928,
+  "perdir_best_margin": 0.0,
+  "perdir_always_best": true
+}

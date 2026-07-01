@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+main.aux
+main.log
+main.out
+rot_cache.npz

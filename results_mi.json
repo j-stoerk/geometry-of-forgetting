@@ -1,0 +1,8 @@
+{
+  "identity_max_rel_err": 0.009075792098365475,
+  "sandwich_holds": true,
+  "floor_min_identifiability": 1.7473008198951068,
+  "floor_max_identifiability": 0.0001663062726562914,
+  "I_min_sep": 0.00041517854984340907,
+  "I_max_sep": 0.6930911519167035
+}

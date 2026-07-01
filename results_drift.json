@@ -1,0 +1,14 @@
+{
+  "sstar_opt_d64": 0.68,
+  "sstar_chance_d64": 0.09375,
+  "sstar_opt_d256": 0.72,
+  "sstar_chance_d256": 0.0234375,
+  "graceful_small_full": 6.35454664075038,
+  "graceful_large_half": 4.347889643611534,
+  "graceful_small_half": 2.006656997138844,
+  "drift_rank_stale_final": 60.0,
+  "drift_rank_rec_final": 4.0,
+  "drift_plasticity_stale_final": 0.0,
+  "drift_plasticity_rec_final": 0.933333333333333,
+  "drift_true_rank": 4
+}
