@@ -1,0 +1,12 @@
+[Q8] Subspace-level membership and attribute inference attack suite on (U, Lambda) summaries
+status: implemented_stronger_empirical_and_theoretical_object
+takeaway: The privacy object is now a stronger attack suite: shadow-model membership inference and conditional attribute inference both operate directly on released low-rank second-moment summaries, and adding calibrated Gaussian noise trades attack AUC down against an explicit approximate privacy budget.
+
+[Q10] Occupied-rank ledger in a real tiny-transformer continual-pretraining stream with pre-emptive plasticity alarm
+status: implemented_real_model_empirical_object
+takeaway: The capacity-ledger object is now instantiated on a real tiny transformer: layerwise effective-rank growth can be measured during continual pretraining, and a simple occupied-ratio alarm predicts impending plasticity loss on the next domain before training it.
+
+[Q12] Real-model fine-tuning benchmark: tuned LR schedules versus sketched-interference trust-region optimizer
+status: implemented_real_model_empirical_object
+takeaway: The optimizer question is now instantiated as a real-model benchmark: a Frequent-Directions gradient sketch defines a trust-region penalty during task-B fine-tuning, and its best score can be compared directly against the best tuned learning-rate schedule on the same transformer and stream.
+

@@ -1176,7 +1176,12 @@ policy gradients, floor-minimizing meta-learning);
 \texttt{evaluate\_next\_steps.py} the sketched-drift, trust-region, anchor-protection,
 probe-similarity, consolidation, floor-scheduled-memory, dream-replay, cascade, and
 world-model studies of Secs.~\ref{si:cheapgn}, \ref{si:llm}, and~\ref{si:memory};
-\texttt{kaggle\_probe\_gate\_llm.py} the probe-gate protocol on similar text domains;
+\texttt{kaggle\_probe\_gate\_llm.py} the probe-gate protocol on real text (results in
+\texttt{probe\_gate\_results.json});
+\texttt{evaluate\_open\_questions\_new.py} the open-question battery, with each result
+classified as exact-scope support, mechanism probe, or appendix scoping (only exact-scope
+results are quoted in this manuscript), and \texttt{evaluate\_oq\_hardened.py} an
+end-to-end drift-and-noise probe on a gradient-trained network;
 \texttt{experiments\_drift.py} the $\sstar$ ablation, graceful-degradation, and drift figures;
 \texttt{experiments\_extra.py} the self-calibrating-$\sstar$ and tight multiclass-constant
 results; and \texttt{experiments\_roadmap.py} the feasibility-diagnostic, Frequent-Directions,
@@ -1341,6 +1346,19 @@ geometric form of an effective-capacity budget $N+\kappa M$ (parameters plus a p
 memory worth), where $\kappa$ is the rank a stored direction occupies---the right panel of
 Fig.~\ref{fig:simcap} confirms the knee location across feature dimensions.
 
+\paragraph{The floor is a conserved quantity with exchange rates.} In the exact regime the
+distortion floor behaves as a conserved bill that method families pay in different
+currencies (\texttt{evaluate\_open\_questions\_new.py}, $48$ seeds). Relocation is exactly
+zero-sum: naive descent pays the full amount as forgetting of $A$, orthogonal allocation
+pays the same amount as deferred fit on $B$, and the optimal merge splits it between the
+tasks. Only added conflict-free capacity reduces the bill, linearly at rate
+$\approx D/r_{\rm shared}$ per relieved dimension ($D=4.68\to3.16\to1.63\to0$ as the three
+shared directions are moved to private capacity). Replay does not reduce the geometric
+floor at all: with the true $\Sig_A$ known, stored exemplars are redundant, and their
+measured benefit is the $O(1/m)$ excess of an \emph{estimated} geometry ($+2.13$, $+0.36$,
+$+0.08$ above $D$ at $m=10,40,160$ exemplars). Forgetting, deferred plasticity, capacity,
+and memory are interconvertible only above the floor; nothing converts below it.
+
 \section{Method comparison and offline-merge ablation}
 \label{si:compare}
 Table~\ref{tab:compare} gives the measured numbers behind the front-page comparison
@@ -1408,7 +1426,14 @@ accuracy, however, is not monotone in $D$ once the floor is small ($0.944\pm0.00
 $0.957\pm0.007$ for isotropic): Theorem~\ref{thm:merge} minimizes interference energy, and
 masked-evaluation accuracy saturates before that energy reaches zero. The $\Sig$-metric is
 thus the correct merge geometry on real ViT features, with the accuracy benefit contingent
-on the evaluation exercising the interfering directions.
+on the evaluation exercising the interfering directions. This decoupling is itself
+predictable: parameterizing held-out evaluation metrics by how strongly they load the
+shared, interfering directions, the isotropic-versus-$\Sig$-orthogonal evaluation gap
+varies systematically with that loading (held-out correlation $\approx0.5$, sign-stable
+across $44$ seeds), and an evaluation that weighs all tasks equally favors the plain
+average by construction---consistent with reports that isotropic merging can match or
+exceed orthogonalizing merges \cite{marczak2025iso}. Whether merge geometry pays is a
+property of $\Sig_{\rm eval}$, decidable per benchmark.
 
 \section{The projection remains effective in sequential LoRA on language models}
 \label{si:llm}
@@ -1460,9 +1485,21 @@ $3.21$ for the input gate under conflict, versus $2.20$ for the probe gate and $
 the oracle). The probe's decisions are noisy exactly when data are scarce ($56$--$82\%$
 agreement with the oracle here), so this is a validated candidate rather than a solved
 problem; but it requires no extra state and is modality-agnostic, because it reads the
-functional instead of the input geometry. A runnable protocol for the real-text test---the
-probe gate against naive, protect-all, and the input gate on four similar news domains with
-sequential LoRA---is released as \texttt{kaggle\_probe\_gate\_llm.py}.
+functional instead of the input geometry.
+
+Running that protocol on real text (GPT-2, sequential LoRA on four AG-News topic domains,
+three seeds; \texttt{kaggle\_probe\_gate\_llm.py}, \texttt{probe\_gate\_results.json})
+yields three findings. First, the probe signal transfers: the probe cosines form a stable,
+seed-reproducible task-relationship map (adjacent topics $\approx+0.10$, world versus
+sci/tech $\approx-0.18$) precisely where input overlap is uninformative. Second, the map
+shows that these topic slices are \emph{not} a similar-task stream in the functional sense:
+every pairwise similarity sits below the share threshold, so the gate correctly stays
+protective and all four methods tie within noise (final loss $3.78$--$3.79$; the probe gate
+attains the lowest forgetting in all three seeds, $0.054$ versus $0.057$ for protect-all,
+not significant at $n=3$). Third, the measured similarities predicted this outcome before
+training: a stream with no above-threshold alignment leaves any gate nothing to add. The
+open problem therefore refines from ``find a similarity signal'' to ``find a genuinely
+similar text stream''.
 
 \begin{table}[htb]\centering\small
 \caption{Sequential LoRA fine-tuning of GPT-2 on four dissimilar text domains (forgetting
@@ -1718,10 +1755,11 @@ Replay ($16$/domain)           & $4.59$ & $+0.91$ & buffer \\
 
 \section{Extensions and generality}
 \label{si:extensions}
-The interference functional applies beyond sequential continual learning. We give seven
+The interference functional applies beyond sequential continual learning. We give eight
 exact-A1 proofs-of-concept on synthetic constructions (the federated, out-of-distribution,
 task-free, and multimodal results average over $20$ seeds;
-\texttt{evaluate\_hypotheses.py}, \texttt{evaluate\_applications.py}). These are
+\texttt{evaluate\_hypotheses.py}, \texttt{evaluate\_applications.py},
+\texttt{evaluate\_open\_questions\_new.py}). These are
 directional demonstrations of scope, not benchmarks.
 
 \paragraph{Federated learning is $\Sig$-merging.} Non-IID clients are tasks with different
@@ -1803,6 +1841,17 @@ learning are thus complementary: a backbone meta-trained for feature orthogonali
 need for gating, so representation learning and structural allocation address the same
 distortion floor.
 
+\paragraph{Certified unlearning is the dichotomy inverted.} Removability read backwards is
+an unlearning certificate. Projecting a trained model's update off $\range\Sig_F$ of a
+forget set removes that set's influence exactly when forget and retain supports are
+disjoint: held-out forget-set loss rises to the untrained level while retain-set
+performance is untouched. When the supports share $k$ directions the removal is
+necessarily lossy, and the collateral damage to the retain set is not merely bounded but
+\emph{predicted exactly} by the retain energy on the shared support (correlation $1.00$,
+zero mean error, $44$ seeds, $k=0$--$3$): the same floor that lower-bounds forgetting
+lower-bounds the retain cost of exact unlearning. Support overlap is thus a principled
+impossibility boundary for machine unlearning under shared representations.
+
 \begin{figure}[htb]\centering
 \includegraphics[width=\textwidth]{fig_applications}
 \caption{Three application domains for the interference functional
@@ -1834,7 +1883,10 @@ $31$--$59\%$ lower deferred new-task loss at matched forgetting across budget le
 plain online gradient descent on the penalty matching the closed-form optimum. The gate of
 Sec.~\ref{sec:algo} is the $\mu\to\infty$ limit of this controller on the conflicting
 subspace; intermediate budgets interpolate continuously between naive descent and full
-protection.
+protection. The controller's metric can also be sketched: at sketch size $\ell\ge2r$ the
+Frequent-Directions metric reproduces the full-covariance frontier to $1.3\pm0.5\%$ at
+$3.6\times$ less memory, while $\ell=r$ fails outright ($43\%$ gap)---the same $\ell=2r$
+sizing rule as Sec.~\ref{si:cheapgn}.
 
 \paragraph{Consolidation is spectral compression with a proven price.} When tasks share
 structure, the per-task protect bases are redundant. Consolidating them onto the joint
