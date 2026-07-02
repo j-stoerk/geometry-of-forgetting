@@ -1070,7 +1070,8 @@ mechanism transfers, while the right similarity signal for language remains open
 The main open design question is therefore not the structural retention mechanism, which
 transfers across modalities, but a similarity signal for language that can recover
 transfer on similar text tasks without relaxing protection where conflict
-dominates. To validate the broad applicability of this framework, several extensions are detailed in
+dominates; a probe-based candidate for that signal is validated in the exact regime in
+Sec.~\ref{si:llm}. To validate the broad applicability of this framework, several extensions are detailed in
 the Supporting Information. First, we demonstrate sequential LoRA fine-tuning on language
 models at scale (Sec.~\ref{si:llm}), using recursive Gauss--Newton tracking on the adapting
 features together with a modality-appropriate similarity gate for language. Second, the
@@ -1099,9 +1100,12 @@ Several algorithmic refinements---a self-calibrating threshold, low-cost $\mathc
 online curvature via Frequent Directions
 \cite{liberty2013}, a per-direction gate, and the soft-gating capacity coordinate
 $r_{\rm eff}=\sum_j(1-\mathrm{keep}_j)$---are developed and validated in the Supporting
-Information. Together with low-rank or diagonal Gauss--Newton approximations of $\bar H_A$,
-they suggest a practical route for carrying the architecture-general identity into fully
-fine-tuned deep networks at controlled cost.
+Information. The functional further extends to control and memory: an interference-budgeted
+trust region that dominates step-size control, consolidation with a priced forgetting bound,
+floor-scheduled replay, and generative replay from the subspace state itself
+(Sec.~\ref{si:memory}). Together with low-rank or diagonal Gauss--Newton approximations of
+$\bar H_A$, they suggest a practical route for carrying the architecture-general identity
+into fully fine-tuned deep networks at controlled cost.
 
 A further assumption deserves explicit statement: as presented, \IGFA{} assumes task
 boundaries are known and switches are abrupt at training time. Section~\ref{sec:algo} and
@@ -1169,6 +1173,9 @@ ablation of Fig.~\ref{fig:teaser} and Table~\ref{tab:compare};
 (federated $\Sig$-merge, OOD signal, task-free boundaries, multimodal blocks) and
 \texttt{evaluate\_applications.py} three more (physics-informed constraints, Fisher-metric
 policy gradients, floor-minimizing meta-learning);
+\texttt{evaluate\_next\_steps.py} the sketched-drift, trust-region, anchor-protection,
+probe-similarity, consolidation, floor-scheduled-memory, and dream-replay studies of
+Secs.~\ref{si:cheapgn}, \ref{si:llm}, and~\ref{si:memory};
 \texttt{experiments\_drift.py} the $\sstar$ ablation, graceful-degradation, and drift figures;
 \texttt{experiments\_extra.py} the self-calibrating-$\sstar$ and tight multiclass-constant
 results; and \texttt{experiments\_roadmap.py} the feasibility-diagnostic, Frequent-Directions,
@@ -1205,8 +1212,9 @@ verifications (Sec.~\ref{si:mi}), theory details
 (Sec.~\ref{si:theory}), the full method comparison behind Fig.~\ref{fig:teaser}
 (Sec.~\ref{si:compare}), benchmark and scale experiments
 (Secs.~\ref{si:llm}--\ref{si:pretrain}), the algorithmic refinements referenced in the
-Discussion, and extensions of the framework to federated, out-of-distribution, task-free, and
-multimodal settings (Sec.~\ref{si:extensions}). All results are exact-regime simulations or
+Discussion, extensions of the framework to federated, out-of-distribution, task-free, and
+multimodal settings (Sec.~\ref{si:extensions}), and memory-systems and control extensions
+(Sec.~\ref{si:memory}). All results are exact-regime simulations or
 runnable notebooks with fixed seeds.
 
 \section{Deferred proofs}
@@ -1440,6 +1448,19 @@ projection (and its recursive Gauss--Newton tracking) carries over and provides 
 Fisher-free retention; a gate that succeeds on \emph{similar} language tasks remains an open
 problem.
 
+\paragraph{A candidate similarity signal for text.} The failure above is a signal problem,
+not a mechanism problem: input-subspace overlap is uninformative when all domains share
+low-level structure. An exact-regime study of precisely this confound---input overlap fixed
+at $1.0$ while target similarity varies (\texttt{evaluate\_next\_steps.py})---shows that a
+\emph{probe} signal, a few-shot head fit on the incoming task compared to the stored head by
+signed cosine and thresholded at the theory's break-even value, recovers near-oracle gating
+where the input gate collapses to share-all and pays the full conflict bias (mean loss
+$3.21$ for the input gate under conflict, versus $2.20$ for the probe gate and $1.95$ for
+the oracle). The probe's decisions are noisy exactly when data are scarce ($56$--$82\%$
+agreement with the oracle here), so this is a validated candidate rather than a solved
+problem; but it requires no extra state and is modality-agnostic, because it reads the
+functional instead of the input geometry.
+
 \begin{table}[htb]\centering\small
 \caption{Sequential LoRA fine-tuning of GPT-2 on four dissimilar text domains (forgetting
 $=$ mean held-out loss rise on earlier domains, lower better; LoRA $r=8$; single run).
@@ -1590,6 +1611,25 @@ budget emerges automatically from each layer's trace ratio---shallow layers stay
 ($k_\ell=0$) while deep layers are capped near their effective rank
 ($k_\ell\!\approx\!5$--$7$), with $93$--$96\%$ of the deep-layer gradient routed into the
 protected null space and only a modest first-domain loss rise ($+0.27$ mean).
+
+\paragraph{The sketch survives drift.} The two remedies of this paper---re-estimation
+against drift (Sec.~\ref{sec:exp:drift}) and sketching against cost---compose. Under the
+rotating-geometry stream, a \emph{decayed} Frequent-Directions sketch ($\ell=2r$ rows,
+$2rd=480$ floats at $d=60$) tracks the current subspace as faithfully as the full recursive
+covariance ($d^2=3600$ floats): mean fidelity $0.88$ versus $0.85$ over ten seeds, both
+holding the protected rank at the true value while stale per-task protection fills the
+space (\texttt{evaluate\_next\_steps.py}). Sketched curvature is a viable protected
+geometry under drift, not only a cheaper one.
+
+\paragraph{Anchor protection: the dual construction.} The protector can also be built with
+no covariance at all: $m\ge r$ stored features of the old task span $\range\Sig_A$ for
+samples in general position, so projecting updates off their orthonormalization \emph{is}
+the eigenbasis protection. With $d=256$ features and a $C=400$-output head, $10$ anchor
+features give the same retention as the eigendecomposition (both at numerical zero, versus
+naive forgetting $5.8$) at a $7\times$ cheaper construction with no $d\times d$ covariance;
+the cost is independent of the output count, because the protection is a set of
+function-value constraints ($W\phi_i$ fixed) living in sample space. This is the practical
+route for very large heads and vocabularies.
 
 \begin{figure}[htb]\centering
 \includegraphics[width=0.55\textwidth]{fig_cheapgn}
@@ -1774,6 +1814,50 @@ penalty reduces inter-task overlap and the distortion-floor proxy by orders of m
 (log scale), moving \IGFA{} into the lossless regime.}
 \label{fig:applications}
 \end{figure}
+
+\section{Memory systems and control from the functional}
+\label{si:memory}
+Beyond deciding \emph{where} updates may act, the functional prescribes \emph{how much} to
+move and \emph{when memory is worth spending}. Four exact-regime demonstrations (multi-seed
+means; \texttt{evaluate\_next\_steps.py}) make this operational. The framing follows
+complementary-learning-systems theory: a fast memory system supplies rehearsal, and the
+geometry decides when to invoke it.
+
+\paragraph{The functional is a trust region.} Constraining each update by its predicted
+interference, $\tfrac12(w-w_A)^\top\Sig_A(w-w_A)\le B$---equivalently, descending
+$L_B+\mu\,\tfrac12(w-w_A)^\top\Sig_A(w-w_A)$---traces a strictly better
+retention--plasticity frontier than generic step-size or early-stopping control:
+$31$--$59\%$ lower deferred new-task loss at matched forgetting across budget levels, with
+plain online gradient descent on the penalty matching the closed-form optimum. The gate of
+Sec.~\ref{sec:algo} is the $\mu\to\infty$ limit of this controller on the conflicting
+subspace; intermediate budgets interpolate continuously between naive descent and full
+protection.
+
+\paragraph{Consolidation is spectral compression with a proven price.} When tasks share
+structure, the per-task protect bases are redundant. Consolidating them onto the joint
+spectrum---eigenvectors of the accumulated second moment at fixed captured energy---
+compressed the protect set by $55\%$ ($24\to11$ stored directions) while an adversarially
+conflicting new task induced at most $0.004$ forgetting on the old family, within the
+dropped-eigenvalue bound of $0.04$ that Theorem~\ref{thm:functional} supplies in advance.
+Offline consolidation (``sleep'') is spectral compression whose cost the theory prices
+before it is paid.
+
+\paragraph{Memory is worth spending where the floor is positive.} With a fixed total replay
+budget over a stream of mixed tasks, allocating exemplars in proportion to each task's
+\emph{predicted} distortion floor (from $\Sig$-overlap and target disagreement) retained the
+anchor task $28\pm31\%$ better than a uniform budget, improving in $18$ of $20$ seeds.
+Structural allocation handles the disjoint tasks for free, and memory concentrates where the
+geometry says forgetting is otherwise unavoidable: the fast system supplies rehearsal, the
+functional decides when it is needed.
+
+\paragraph{The subspace state is a replay generator.} In the exact regime, the state
+\IGFA{} already carries---the basis $U$, its eigenvalues, and a weight snapshot---is a
+sufficient statistic for replay: sampling $\hat x=U\Lambda^{1/2}z$ with labels from the
+snapshot and rehearsing on these ``dreamed'' pairs reduces the floor exactly as real replay
+does (mean forgetting $1.71$ versus $1.72$; seedwise agreement $r=0.97$) with zero stored
+examples. Replay and structural allocation are therefore not opposing families: the same
+low-rank state implements both, and buffer-free generative rehearsal inherits replay's floor
+reduction without its storage or privacy cost.
 
 % =====================================================================
 \clearpage
