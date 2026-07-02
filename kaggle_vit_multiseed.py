@@ -322,6 +322,7 @@ def prompt_forward(model, P, img):
     return model.norm(x)[:, 0]
 
 def prompt_stream(seed, method, device, cifar):
+    from PIL import Image
     torch.manual_seed(seed); rng = np.random.default_rng(seed)
     Xtr_img, ytr, Xte_img, yte = cifar
     model = make_vit(device); tf = make_transform()
@@ -331,40 +332,40 @@ def prompt_stream(seed, method, device, cifar):
     W = torch.zeros(C, 768, device=device, requires_grad=True)
     opt = torch.optim.Adam([P, W], lr=1e-2)
     bases, Q, acc_after = [], None, np.zeros(10)
-    def embed(items, bs=PROMPT_BS):
-        ds = ImgSet(items, tf)
-        return torch.utils.data.DataLoader(ds, batch_size=bs, num_workers=2, pin_memory=True)
+    # NO DataLoader here: multiprocessing workers inside threads leak + respawn each
+    # epoch (slow, noisy destructors). Transform each task once, then slice tensors.
+    tensorize = lambda items: torch.stack([tf(Image.fromarray(x)) for x in items])
+    def batches(X, y, shuffle):
+        idx = torch.randperm(len(X)) if shuffle else torch.arange(len(X))
+        for i in idx.split(PROMPT_BS):
+            yield X[i].to(device, non_blocking=True), y[i].to(device)
     @torch.no_grad()
     def task_acc(t):
         idx = np.where(np.isin(yte, cls_tasks[t]))[0][:500]   # 500-image eval subsample
+        Xe = tensorize(Xte_img[idx]); ye = torch.as_tensor(yte[idx]).long()
+        mask = ~torch.as_tensor(np.isin(np.arange(C), cls_tasks[t]), device=device)
         good = 0
-        for k, xb in enumerate(embed(list(Xte_img[idx]))):
+        for xb, yb in batches(Xe, ye, False):
             with torch.autocast(device_type="cuda", enabled=device.startswith("cuda")):
-                f = prompt_forward(model, P, xb.to(device)).float()
-            logit = (f @ W.T).masked_fill(
-                ~torch.as_tensor(np.isin(np.arange(C), cls_tasks[t]), device=device), -1e9)
-            good += (logit.argmax(1).cpu().numpy() ==
-                     yte[idx][k * PROMPT_BS:(k + 1) * PROMPT_BS]).sum()
+                f = prompt_forward(model, P, xb).float()
+            good += int(((f @ W.T).masked_fill(mask, -1e9).argmax(1) == yb).sum())
         return good / len(idx)
     for t in range(10):
         idx = np.where(np.isin(ytr, cls_tasks[t]))[0][:2000]  # 2000-image train subsample
+        Xt = tensorize(Xtr_img[idx]); yt = torch.as_tensor(ytr[idx]).long()
+        mask = ~torch.as_tensor(np.isin(np.arange(C), cls_tasks[t]), device=device)
         grads = []
         for _ in range(PROMPT_EPOCHS):
-            for k, xb in enumerate(tqdm(embed(list(Xtr_img[idx])), leave=False,
-                                        desc=f"prompt s{seed} t{t} @{device}")):
-                yb = torch.as_tensor(ytr[idx][k * PROMPT_BS:(k + 1) * PROMPT_BS],
-                                     device=device).long()
+            for xb, yb in batches(Xt, yt, True):
                 with torch.autocast(device_type="cuda", enabled=device.startswith("cuda")):
-                    f = prompt_forward(model, P, xb.to(device)).float()
-                logit = (f @ W.T).masked_fill(
-                    ~torch.as_tensor(np.isin(np.arange(C), cls_tasks[t]), device=device), -1e9)
-                loss = F.cross_entropy(logit, yb)
+                    f = prompt_forward(model, P, xb).float()
+                loss = F.cross_entropy((f @ W.T).masked_fill(mask, -1e9), yb)
                 opt.zero_grad(); loss.backward()
                 if method == "igfa" and Q is not None:
                     P.grad -= (P.grad @ Q) @ Q.T              # gate in prompt-embedding space
-                grads.append(P.grad.detach().flatten(0, 0).cpu())
+                grads.append(P.grad.detach().cpu())
                 opt.step()
-        G = torch.cat([g for g in grads[-50:]]).to(device)    # last-50-step gradient rows
+        G = torch.cat(grads[-50:]).to(device)                 # last-50-step gradient rows
         _, _, Vh = torch.linalg.svd(G, full_matrices=False)
         Bn = Vh[:RANK].T
         if method == "igfa":
@@ -373,6 +374,7 @@ def prompt_stream(seed, method, device, cifar):
             Q = torch.linalg.qr(torch.cat(prot, 1))[0] if prot else None
         bases.append(Bn)
         acc_after[t] = task_acc(t)
+        log(f"  prompt-{method} seed{seed} task{t} done @{device} (acc {acc_after[t]:.3f})")
     final = np.array([task_acc(t) for t in range(10)])
     del model; torch.cuda.empty_cache()
     return final.mean(), float((acc_after - final)[:-1].mean())

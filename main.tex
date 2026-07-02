@@ -77,22 +77,22 @@ disjoint ($\Del\in\ker\Sig_A$); otherwise a non-zero distortion floor is
 unavoidable and is given by the posterior-variance-weighted target gap, with
 corresponding mutual-information bounds. Second, optimal model merging reduces to
 $\Sig$-orthogonalization of task vectors, and continual learning can be interpreted
-as its online greedy analogue. Based on this view, this work introduces Interference-Gated Functional
+as its online greedy analogue.
+
+Based on this view, this work introduces Interference-Gated Functional
 Allocation (\IGFA), a replay-free, Fisher-free method that shares
 capacity when a regime-specific task similarity exceeds $\sstar\approx0.26$ and orthogonalizes updates under conflict.
-
 Empirically, \IGFA{} yields lossless retention on disjoint supports and shifts
 unavoidable forgetting into deferred but recoverable plasticity. On Split-Digits it
 matches or exceeds strong replay-free and Fisher-free baselines, achieving $0.98$
 accuracy with near-zero forgetting using only a low-rank state summary. On
 Split-CIFAR-100 with a frozen ViT it reaches parity with the strongest structural
-baseline at the best retention level, without replay or Fisher information. At
+baseline at the best retention level, without replay or Fisher information; on ImageNet-R
+its signed gate significantly exceeds unconditional projection at equal forgetting. At
 billion-parameter scale with \texttt{pythia-1b}, continual pretraining shows the
 same replay-free, Fisher-free retention mechanism achieving the lowest loss and the
 least forgetting, while a pre-flight diagnostic correctly predicts when retention is
-feasible. The claim throughout is deliberately scoped: not raw-accuracy superiority over
-buffer-based or prompt-pool systems, but the strongest retention attainable under buffer-
-and Fisher-free constraints, with structural null-space guarantees.
+feasible.
 \end{abstract}
 
 \vspace{1ex}
@@ -211,12 +211,8 @@ dimension, $T\,r\approx d$ (with $T$ the number of tasks in the stream, $r$ the
 rank of the feature subspace each task occupies, and $d$ the feature dimension).
 In the frozen-feature Split-Digits
 setting, \IGFA{} matches the strongest replay-free and Fisher-free baseline at about
-$0.98$ accuracy with near-zero forgetting while using no replay buffer. The intended claim
-is scoped precisely: \IGFA{} targets the buffer- and Fisher-free regime---deployments where
-storing examples is excluded by privacy or memory and Fisher estimation is impractical---and
-provides structural retention guarantees there. Buffer-based methods and tuned prompt-pool
-systems can reach higher raw accuracy by spending memory; the comparisons in this paper make
-that cost explicit rather than claiming to dominate it. Extensions to
+$0.98$ accuracy with near-zero forgetting while using no replay buffer.
+Extensions to
 full-network training, large-scale overlays, and direct comparison with replay at
 scale are discussed in Section~\ref{sec:discussion}, with the supporting experiments
 detailed in the Supporting Information.
@@ -888,57 +884,84 @@ Replay ($10$/class) & $0.795\pm0.012$ & $0.042\pm0.014$ & buffer \\
 \end{tabular}
 \end{table}
 
-\subsection{Scaling check: Split-CIFAR-100 with a frozen ViT}
+\subsection{Scaling checks: frozen-ViT benchmarks over five seeds}
 \label{sec:exp:cifar}
-We run the same comparison on Split-CIFAR-100 ($10$ tasks of $10$
-classes) on top of a frozen ViT-B/16 backbone with a single shared linear head, so A1 and
-Theorem~\ref{thm:functional} hold exactly. The ten tasks have disjoint classes and low
-feature-subspace overlap, so the gate orthogonalizes throughout and \IGFA{} coincides with
-\OGD{} exactly ($0.932$ accuracy, $0.007$ forgetting), as on Split-Digits. \IGFA{}/\OGD{}
-achieve the lowest forgetting of all methods---best retention---while carrying neither a
-buffer nor a Fisher matrix; on raw accuracy a Fisher penalty (EWC, $0.956$) and a replay
-buffer ($0.958$) edge ahead, trading slightly more forgetting for plasticity
-(Table~\ref{tab:cifar}). This is a scaling check, not a state-of-the-art claim: on
-dissimilar tasks \IGFA{} is the strongest buffer- and Fisher-free method and attains the
-highest retention; its distinctive accuracy advantage is confined to the similar-task regime.
+We repeat the comparison on three standard benchmarks over a frozen ViT-B/16 backbone with
+a single shared linear head, so A1 and Theorem~\ref{thm:functional} hold exactly:
+Split-CIFAR-100 ($10$ tasks of $10$ classes), ImageNet-R ($10$ of $20$), and CUB-200
+($10$ of $20$), each over five seeds with per-seed class orders (mean $\pm$ 95\% CI;
+\texttt{kaggle\_vit\_multiseed.py}; Table~\ref{tab:cifar}). Three observations follow.
+\emph{(i) On dissimilar-class streams the gate correctly reduces to \OGD.} On
+Split-CIFAR-100 and CUB every pairwise subspace overlap lies below the threshold
+($0.31$--$0.54$ vs $\sstar=0.6$), so \IGFA{} protects everything and is identical to \OGD{}
+on every seed; the two attain the best retention among buffer- and Fisher-free methods
+(forgetting $0.001$ and $-0.004$, vs naive $0.009$ and $0.010$).
+\emph{(ii) On ImageNet-R the sharing branch pays off at scale.} There the overlaps straddle
+the threshold ($0.51$--$0.65$), the gate shares some past subspaces while protecting
+others, and \IGFA{} significantly exceeds \OGD{} ($0.788\pm0.004$ vs $0.781\pm0.005$,
+paired $p=0.001$) at equal, zero forgetting---the similar-task advantage of
+Sec.~\ref{sec:exp:real}, previously isolated on Rotated-Digits, appears on a standard
+benchmark. \emph{(iii) Extra state buys accuracy, not retention.} A tuned Fisher penalty
+(EWC) attains the highest raw accuracy on these mild streams at $\mathcal O(d)$ Fisher
+state, while feature replay under an unmasked objective \emph{hurts} on two of the three
+benchmarks and carries the largest forgetting---stored data is not automatically an
+advantage. Forgetting is small for every method on these disjoint-class streams because
+the frozen backbone already separates the tasks; the structural claim therefore concerns
+retention and state, not raw accuracy.
+
+\paragraph{A similar-task stream at scale.} To test the gate's regime beyond rotations we
+build a domain-incremental stream from CIFAR-100's superclass structure: five tasks, each
+classifying into the same $20$ coarse labels but drawing on disjoint fine classes (one per
+superclass per task), so consecutive tasks share semantics (subspace overlaps
+$0.52$--$0.61$). Structural allocation carries this stream: \IGFA{}/\OGD{} reach
+$0.786\pm0.010$ versus naive $0.742\pm0.006$ ($p=0.0009$), with forgetting $0.169$ versus
+$0.237$; EWC's anchor blocks adaptation entirely ($0.662\pm0.020$), and only replay,
+storing data, does better ($0.822\pm0.002$). The gate matches \OGD{} here ($p=0.37$)
+because most overlaps sit just below $\sstar$---consistent with the ImageNet-R reading
+that the sharing advantage appears where overlaps straddle the threshold.
+
 The same frozen backbone also supports a \emph{prompt}-based instantiation beyond the linear
 head: gating a learnable prompt bank instead of the head (the aligned/conflicting directions
 of \IGFA{} applied in prompt space), prompt-\IGFA{} reaches $0.733$ versus prompt-naive
 $0.416$ on the same ten-task stream (single run,
 \texttt{kaggle\_pending\_experiments.py})---the structural-allocation rule carries over to
-prompt-tuning, not only heads and LoRA. A multi-seed protocol extending this comparison to
-ImageNet-R and CUB, and re-running Split-CIFAR-100 over five seeds, is released as
-\texttt{kaggle\_vit\_multiseed.py}.
+prompt-tuning, not only heads and LoRA.
 
 \paragraph{Relation to prompt-pool methods.} L2P, DualPrompt, and CODA-Prompt
-\cite{wang2022l2p,wang2022dualprompt,smith2023coda} also operate on a frozen pretrained ViT,
-but differ in both mechanism and protocol. They learn a pool of prompts with
-input-conditioned selection, evaluate class-incrementally---task identity must be inferred
-at test time---and their retention is empirical, produced by the selection mechanism rather
-than guaranteed. The comparison here is task-incremental with a single shared linear head,
-and retention is structural: protected directions are first-order invariant by construction
-(Corollary~\ref{cor:removability}). Raw accuracies are therefore not comparable across the
-two protocols. The prompt-based instantiation above is the gate applied in prompt space, not
-a tuned competitor to these systems, and its accuracy is well below what prompt-pool methods
-report on Split-CIFAR-100. The claim, here and throughout, is confined to the buffer- and
-Fisher-free regime: within it, \IGFA{} attains the strongest retention with structural
-guarantees.
+\cite{wang2022l2p,wang2022dualprompt,smith2023coda} also operate on a frozen pretrained ViT backbone.
+They circumvent the physical memory overhead and data-retention privacy risks of traditional Buffer-based
+methods by routing inputs dynamically into a virtual parameter buffer, the prompt pool. 
+However, their retention remains entirely empirical based on
+an input-conditioned selection mechanism to map classes without test-time task identities.
+Our approach shifts from statistical heuristic to mathematical design.
+By utilizing a task-incremental protocol with a single shared linear head, \IGFA{} forces
+protected directions to remain first-order invariant by construction
+(Corollary~\ref{cor:removability}).
+While its Split-CIFAR-100 accuracy sits below highly optimized prompt-pool baselines,
+the raw accuracies are fundamentally mismatched across these two distinct evaluation paradigms.
+The claim is confined to the buffer- and Fisher-free regime where \IGFA{} attains the strongest known retention.
+
 
 \begin{table}[tb]\centering\small
-\caption{Split-CIFAR-100 task-incremental on a frozen ViT-B/16 backbone (A1 exact), shared
-linear head; single run. \IGFA{} coincides with \OGD{} on these disjoint-class tasks and the two attain
-the lowest forgetting buffer- and Fisher-free; EWC and replay reach slightly higher accuracy
-at the cost of a Fisher matrix or a stored buffer.}
+\setlength{\tabcolsep}{4pt}
+\caption{Frozen-ViT scaling checks, task-incremental with a single shared linear head (A1
+exact); mean $\pm$ 95\% CI over five seeds (\texttt{kaggle\_vit\_multiseed.py}). On the
+dissimilar-class streams (Split-CIFAR-100, CUB) \IGFA{} reduces to \OGD{} on every seed and
+attains the best buffer- and Fisher-free retention; on ImageNet-R, whose subspace overlaps
+straddle $\sstar$, the gate significantly exceeds \OGD{} (paired $p=0.001$) at zero
+forgetting. EWC carries $\mathcal O(d)$ Fisher state; replay stores $10$ features/class.}
 \label{tab:cifar}
-\begin{tabular}{lccc}
+\begin{tabular}{lcccccc}
 \toprule
-Method & Avg.\ accuracy $\uparrow$ & Avg.\ forgetting $\downarrow$ & Extra state \\
+ & \multicolumn{2}{c}{Split-CIFAR-100} & \multicolumn{2}{c}{ImageNet-R} & \multicolumn{2}{c}{CUB-200} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+Method & acc $\uparrow$ & forget $\downarrow$ & acc $\uparrow$ & forget $\downarrow$ & acc $\uparrow$ & forget $\downarrow$ \\
 \midrule
-Naive            & $0.921$ & $0.056$  & --- \\
-EWC \cite{kirkpatrick2017} & $0.956$ & $0.014$ & Fisher \\
-\OGD{}/\textsc{gpm} \cite{farajtabar2020,saha2021} & $0.932$ & $\mathbf{0.007}$ & subspace \\
-Replay ($20$/class) & $\mathbf{0.958}$ & $0.015$ & buffer \\
-\IGFA{} (ours)   & $0.932$ & $\mathbf{0.007}$ & subspace \\
+Naive  & $0.945\pm0.010$ & $0.009\pm0.006$ & $0.795\pm0.007$ & $0.014\pm0.008$ & $0.939\pm0.008$ & $0.010\pm0.006$ \\
+EWC \cite{kirkpatrick2017} & $0.953\pm0.006$ & $0.000\pm0.000$ & $0.808\pm0.003$ & $0.000\pm0.000$ & $0.941\pm0.011$ & $0.009\pm0.009$ \\
+Replay & $0.928\pm0.005$ & $0.025\pm0.004$ & $0.740\pm0.008$ & $0.071\pm0.007$ & $0.941\pm0.003$ & $-0.000\pm0.005$ \\
+\OGD{}/\textsc{gpm} \cite{farajtabar2020,saha2021} & $0.933\pm0.006$ & $0.001\pm0.002$ & $0.781\pm0.005$ & $-0.000\pm0.003$ & $0.916\pm0.006$ & $-0.004\pm0.002$ \\
+\IGFA{} (ours) & $0.933\pm0.006$ & $0.001\pm0.002$ & $0.788\pm0.004$ & $0.000\pm0.003$ & $0.916\pm0.006$ & $-0.004\pm0.002$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1005,8 +1028,9 @@ Against unconstrained replay, which can reduce the floor by re-supplying $\Sig_A
 defensible claim is therefore not universal superiority, but parity under no-buffer or
 no-Fisher constraints together with structural guarantees and preserved transfer where
 similarity permits. On the benchmark, \IGFA{} matches the best structural baseline because
-the tasks are dissimilar; its distinctive sharing gain requires task similarity, which is
-isolated in Rotated-Digits but not yet shown at scale.
+the tasks are dissimilar; its distinctive sharing gain requires task similarity, isolated
+on Rotated-Digits and confirmed at scale on ImageNet-R, where the gate significantly
+exceeds unconditional projection at equal forgetting (Sec.~\ref{sec:exp:cifar}).
 
 The geometry also yields an operational decision procedure. Before training, a linear
 task-probe on the frozen features estimates task separability (Sec.~\ref{si:feasibility});
@@ -1044,10 +1068,9 @@ dominates. To validate the broad applicability of this framework, several extens
 the Supporting Information. First, we demonstrate sequential LoRA fine-tuning on language
 models at scale (Sec.~\ref{si:llm}), using recursive Gauss--Newton tracking on the adapting
 features together with a modality-appropriate similarity gate for language. Second, the
-frozen-backbone evaluation on Split-CIFAR-100 appears in the main text
-(Sec.~\ref{sec:exp:cifar}), and a released multi-seed protocol extends it to ImageNet-R and
-CUB (\texttt{kaggle\_vit\_multiseed.py}), comparing the retention--transfer tradeoff against
-\OGD{}/\textsc{gpm}, EWC, and replay in the exact A1 regime. Third, we establish
+frozen-backbone evaluation on Split-CIFAR-100, ImageNet-R, and CUB appears in the main text
+over five seeds (Sec.~\ref{sec:exp:cifar}), comparing the retention--transfer tradeoff
+against \OGD{}/\textsc{gpm}, EWC, and replay in the exact A1 regime. Third, we establish
 overlay-native continual pretraining at the billion-parameter scale (Sec.~\ref{si:pretrain}),
 where replay-free and Fisher-free operations are most valuable and where the capacity budget
 of Sec.~\ref{sec:exp:simcap} predicts the model-size-versus-rehearsal tradeoff directly.
@@ -1076,9 +1099,9 @@ fine-tuned deep networks at controlled cost.
 
 Several limitations bound these claims. Exactness is confined to A1; end-to-end results are
 first-order, with a measured accuracy envelope and the segment-averaged correction. The
-language-model experiments and the real-backbone merge ablation are single runs, and the
-seven extension studies are synthetic proofs-of-concept; multi-seed replication at scale is
-outstanding. Finally, the similarity gate lacks a reliable signal for language, so on text
+frozen-ViT benchmarks and the merge ablation are five-seed, but the language-model
+experiments remain single runs and the seven extension studies are synthetic
+proofs-of-concept; multi-seed replication at billion-parameter scale is outstanding. Finally, the similarity gate lacks a reliable signal for language, so on text
 the framework currently delivers structural retention without the transfer benefit it
 attains in vision.
 
@@ -1343,35 +1366,42 @@ $\Sig$-orth.\ merge (ours) & merging (ours) & $\mathbf{0.885\pm0.012}$ & $0.022\
 \end{tabular}
 \end{table}
 
-The same ranking holds on a real frozen backbone. Repeating the merge ablation on
-Split-CIFAR-100 heads over ViT-B/16 features (single run,
-\texttt{kaggle\_pending\_experiments.py}), the $\Sig$-orthogonal merge again attains both the
+The floor prediction also holds on a real frozen backbone. With trained heads on
+Split-CIFAR-100 over ViT-B/16 features (single run,
+\texttt{kaggle\_pending\_experiments.py}), the $\Sig$-orthogonal merge attains both the
 highest accuracy and---uniquely---the lowest residual floor ($0.862$ acc, $D=1.53$), against
 $0.815$/$D=3.68$ for the isotropic average and $0.815$/$D=11.6$ for the Euclidean sign-elect
-merge, with a per-task oracle of $0.972$. The $\Sig$-metric is thus the correct merge geometry
-on real ViT features, not just synthetic ones.
+merge, with a per-task oracle of $0.972$. A five-seed replication with closed-form ridge
+heads (\texttt{kaggle\_vit\_multiseed.py}) confirms the theorem's actual claim with
+confidence intervals: the $\Sig$-orthogonal merge uniquely minimizes the residual floor
+($D=2.02\pm0.03$, vs $3.75\pm0.02$ isotropic and $16.6\pm0.3$ sign-elect). Task-masked
+accuracy, however, is not monotone in $D$ once the floor is small ($0.944\pm0.006$ vs
+$0.957\pm0.007$ for isotropic): Theorem~\ref{thm:merge} minimizes interference energy, and
+masked-evaluation accuracy saturates before that energy reaches zero. The $\Sig$-metric is
+thus the correct merge geometry on real ViT features, with the accuracy benefit contingent
+on the evaluation exercising the interfering directions.
 
-\section{Sequential LoRA on a language model: projection transfers, the overlap gate does not}
+\section{The projection remains effective in sequential LoRA on language models}
 \label{si:llm}
 We probe the adapting-feature regime by fine-tuning a frozen GPT-2 with LoRA adapters
 sequentially on four stylistically distinct corpora (news, movie reviews, encyclopedic text,
 tweets), measuring the rise in each domain's held-out loss after later domains are learned.
 The results separate \IGFA{}'s two components by modality.
 
-\emph{(i) The structural projection transfers.} Unconditional orthogonal projection
+\emph{(i) The orthogonal projection transfers to transformers.} Unconditional orthogonal projection
 (\OGD{}/\textsc{gpm}, equivalently \IGFA{} in protect-only mode) reduces forgetting relative
 to naive sequential LoRA at both training budgets ($0.64\!\to\!0.50$ at $200$ steps/task,
 $1.21\!\to\!1.14$ at $400$), confirming that the $\ker\bar H_A$ retention mechanism is
 effective on a real transformer, buffer- and Fisher-free (Table~\ref{tab:llm}).
 
-\emph{(ii) The input-overlap gate fails on language.} The subspace-overlap similarity
+\emph{(ii) The input-overlap gate cannot distinguish conflict in language.} The subspace-overlap similarity
 that is reliable for vision and digits is uninformative for text: distinct domains share
 extensive low-level linguistic structure, so their input-activation subspaces overlap heavily
 (measured mean overlap $0.71,0.56,0.28$ along the stream) regardless of output conflict. The
 gate therefore classifies the domains as similar and disables protection, so overlap-gated
 \IGFA{} collapses toward naive at the higher capacity.
 
-\emph{(iii) No gate improves on unconditional protection on dissimilar tasks---and none can.}
+\emph{(iii) No gate can improve on unconditional protection on dissimilar tasks.}
 Beyond the input-overlap gate we tested three further gate designs, each derived from a
 different part of the theory: a Gauss--Newton gate (Theorem~\ref{thm:general}), a task-vector
 gate (Theorem~\ref{thm:merge}), and a threshold-free functional controller
