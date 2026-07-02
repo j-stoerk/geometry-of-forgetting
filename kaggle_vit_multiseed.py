@@ -36,7 +36,7 @@ RANK        = 12                       # per-task protected-subspace rank
 EPOCHS      = 4                        # linear-head epochs per task
 BS          = 256
 LR          = 1e-3
-EWC_LAM     = 50.0
+EWC_LAM     = 5.0                      # with unit-mean-normalized Fisher (tuned once, Y1 seed 0)
 REPLAY_PER_CLASS = 10
 RUN = dict(Y1=True, Y2=True, Y3=True, Y4=True, Y5=True, Y6=True)
 PROMPT_TOKENS, PROMPT_EPOCHS, PROMPT_BS = 8, 2, 64
@@ -249,7 +249,8 @@ def run_stream(feats, seed, method, superclass=False, verbose=False):
                 if masks[t] is not None: logit = logit.masked_fill(~masks[t], -1e9)
                 l = F.cross_entropy(logit, y[i]); W.grad = None; l.backward()
                 g2 += W.grad ** 2
-            fisher = (fisher + g2 / len(X)) if fisher is not None else g2 / len(X)
+            g2 = g2 / g2.mean().clamp(min=1e-12)          # unit-mean Fisher so EWC_LAM is meaningful
+            fisher = (fisher + g2) if fisher is not None else g2
             Wstar = W.detach().clone()
         if method == "replay":
             for c in np.unique(ytr[tr_tasks[t]]):
@@ -272,9 +273,10 @@ def report(tag, per_method, results):
         results[f"{tag}/{m}"] = dict(acc=[v[0] for v in vals], forget=[v[1] for v in vals])
     for a, b in [("igfa", "ogd"), ("igfa", "naive"), ("igfa", "replay")]:
         if a in per_method and b in per_method:
-            p = stats.ttest_rel([v[0] for v in per_method[a]],
-                                [v[0] for v in per_method[b]]).pvalue
-            print(f"  paired t-test acc {a} vs {b}: p={p:.4f}")
+            xa = [v[0] for v in per_method[a]]; xb = [v[0] for v in per_method[b]]
+            p = 1.0 if np.allclose(xa, xb) else stats.ttest_rel(xa, xb).pvalue
+            print(f"  paired t-test acc {a} vs {b}: p={p:.4f}"
+                  + ("  (identical runs)" if np.allclose(xa, xb) else ""))
 
 # ------------------------- Y5: merge ablation ---------------------------
 def merge_ablation(feats, seed):
@@ -418,8 +420,7 @@ if __name__ == "__main__":
 
     if RUN["Y6"]:
         log("stage 3/3: Y6 prompt-igfa vs prompt-naive (full ViT forwards, seeds split on 2 GPUs)")
-        cifar_imgs = (np.array(list(cif[0]), dtype=object), cif[1],
-                      np.array(list(cif[3]), dtype=object), cif[4])
+        cifar_imgs = (cif[0], cif[1], cif[3], cif[4])   # keep uint8 (N,32,32,3) arrays
         per = {"prompt-naive": [], "prompt-igfa": []}
         for m, key in [("naive", "prompt-naive"), ("igfa", "prompt-igfa")]:
             with ThreadPoolExecutor(len(DEVICES)) as ex:
