@@ -920,6 +920,29 @@ storing data, does better ($0.822\pm0.002$). The gate matches \OGD{} here ($p=0.
 because most overlaps sit just below $\sstar$---consistent with the ImageNet-R reading
 that the sharing advantage appears where overlaps straddle the threshold.
 
+\paragraph{When the gate pays is a measurable property of the stream.} Across all six real
+streams of this paper, the gate's realized advantage over unconditional projection is
+organized by one pre-deployment statistic: the stream's \emph{share density}, the fraction
+of task pairs whose measured similarity crosses the gate threshold
+(Fig.~\ref{fig:density}; \texttt{fig\_stream\_density.py}). On the three zero-density
+streams (Split-CIFAR-100, CUB, the AG-News LoRA domains) the gate provably reduces to
+\OGD{} and ties exactly; the low-density superclass stream ties within noise; and the two
+positive-density streams are precisely the two statistically significant wins, ordered by
+density (Rotated-Digits, density $0.54$, $+0.087$; ImageNet-R, density $0.27$, $+0.007$;
+Spearman $0.90$ over the six streams). The statistic is computable before training from
+the same probes the pre-flight diagnostic already runs, so whether the gate is worth
+deploying is itself a pre-flight question rather than a post-hoc finding.
+
+\begin{figure}[tb]\centering
+\includegraphics[width=0.62\textwidth]{fig_density}
+\caption{The gate's realized gain over \OGD{} against the stream's share density, for all
+six real streams in this paper (stars: statistically significant gains; grey: exact or
+statistical ties). Zero-density streams tie by construction---the gate has nothing to
+decide---and the gain grows with density (Spearman $0.90$). Share density is measurable
+before training, making gate-versus-projection a pre-deployment decision.}
+\label{fig:density}
+\end{figure}
+
 The same frozen backbone also supports a \emph{prompt}-based instantiation beyond the
 linear head, and a pair of protocols brackets exactly when gating pays. When all tasks
 reuse one shared output head---the high-interference regime of a deployed adapter serving
@@ -1180,8 +1203,15 @@ world-model studies of Secs.~\ref{si:cheapgn}, \ref{si:llm}, and~\ref{si:memory}
 \texttt{probe\_gate\_results.json});
 \texttt{evaluate\_open\_questions\_new.py} the open-question battery, with each result
 classified as exact-scope support, mechanism probe, or appendix scoping (only exact-scope
-results are quoted in this manuscript), and \texttt{evaluate\_oq\_hardened.py} an
-end-to-end drift-and-noise probe on a gradient-trained network;
+results are quoted in this manuscript), \texttt{evaluate\_oq\_hardened.py} an
+end-to-end drift-and-noise probe on a gradient-trained network,
+\texttt{evaluate\_unlearning\_real.py} the real-data unlearning study,
+\texttt{evaluate\_upgrades.py} the noise-law, rate-controller, allocation, privacy, and
+damping upgrades, and \texttt{fig\_stream\_density.py} the share-density figure;
+\texttt{kaggle\_interference\_optimizer.py} (the \textsc{InterferenceSGD} benchmark against
+tuned learning-rate schedules) and \texttt{kaggle\_scale\_addons.py} (per-layer text
+similarity, real-feature $\Sig_{\rm eval}$, and the pythia-160m capacity ledger) extend
+these to scale;
 \texttt{experiments\_drift.py} the $\sstar$ ablation, graceful-degradation, and drift figures;
 \texttt{experiments\_extra.py} the self-calibrating-$\sstar$ and tight multiclass-constant
 results; and \texttt{experiments\_roadmap.py} the feasibility-diagnostic, Frequent-Directions,
@@ -1850,7 +1880,14 @@ necessarily lossy, and the collateral damage to the retain set is not merely bou
 \emph{predicted exactly} by the retain energy on the shared support (correlation $1.00$,
 zero mean error, $44$ seeds, $k=0$--$3$): the same floor that lower-bounds forgetting
 lower-bounds the retain cost of exact unlearning. Support overlap is thus a principled
-impossibility boundary for machine unlearning under shared representations.
+impossibility boundary for machine unlearning under shared representations. The two
+regimes separate identically on the paper's own real benchmarks
+(\texttt{evaluate\_unlearning\_real.py}): on near-disjoint Split-Digits, one projection
+matches retraining without the forgotten task on \emph{both} sets (retained accuracy
+$0.991$ versus retrain $0.993$; the forgotten task falls to the retrain level), while on
+Rotated-Digits (overlap $\approx0.68$) the same projection necessarily damages retained
+rotations ($+0.37$ mean accuracy loss versus retrain)---certified removal where supports
+are disjoint, the floor where they are not.
 
 \begin{figure}[htb]\centering
 \includegraphics[width=\textwidth]{fig_applications}
@@ -1886,7 +1923,13 @@ subspace; intermediate budgets interpolate continuously between naive descent an
 protection. The controller's metric can also be sketched: at sketch size $\ell\ge2r$ the
 Frequent-Directions metric reproduces the full-covariance frontier to $1.3\pm0.5\%$ at
 $3.6\times$ less memory, while $\ell=r$ fails outright ($43\%$ gap)---the same $\ell=2r$
-sizing rule as Sec.~\ref{si:cheapgn}.
+sizing rule as Sec.~\ref{si:cheapgn}. Under gradient noise, the residual risk of protection
+itself obeys a verified diffusion law: with basis error at principal angle $\epsilon$, the
+noise-driven forgetting is $\tfrac12\eta^2\sigma^2 t\,r\sin^2\epsilon$ (measured-to-law
+ratio $1.05$--$1.07$ across $\eta$ and $\epsilon$; exactly zero at $\epsilon=0$), which
+inverts to a retention-aware step-size bound
+$\eta^\ast=\sqrt{2\tau/(\sigma^2 T r\sin^2\epsilon)}$ for tolerance $\tau$ over horizon
+$T$ (\texttt{evaluate\_upgrades.py}).
 
 \paragraph{Consolidation is spectral compression with a proven price.} When tasks share
 structure, the per-task protect bases are redundant. Consolidating them onto the joint
@@ -1916,7 +1959,14 @@ forgetting, against $4.23$ without replay) and degrade gracefully with model err
 at $20\%$ dynamics noise), so counterfactual replay inherits the floor reduction up to the
 world model's own fidelity. Replay and structural allocation are therefore not opposing
 families: the same low-rank state implements both, and buffer-free generative rehearsal
-inherits replay's floor reduction without its storage or privacy cost.
+inherits replay's floor reduction at sharply reduced exposure. The privacy claim can be
+made formal: the state is a covariance release, so the analytic Gaussian mechanism applies
+directly; with $n=600$ samples behind the release, calibrated noise at
+$(\epsilon{=}8,\delta{=}10^{-5})$ leaves the released subspace at fidelity $0.99$ with a
+likelihood-ratio membership attack at chance, while at small $n$ the sensitivity $2/n$
+makes certified privacy and utility incompatible
+(\texttt{evaluate\_upgrades.py})---differentially private dream replay is viable exactly
+for data-rich tasks.
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
