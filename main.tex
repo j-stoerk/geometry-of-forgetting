@@ -920,12 +920,18 @@ storing data, does better ($0.822\pm0.002$). The gate matches \OGD{} here ($p=0.
 because most overlaps sit just below $\sstar$---consistent with the ImageNet-R reading
 that the sharing advantage appears where overlaps straddle the threshold.
 
-The same frozen backbone also supports a \emph{prompt}-based instantiation beyond the linear
-head: gating a learnable prompt bank instead of the head (the aligned/conflicting directions
-of \IGFA{} applied in prompt space), prompt-\IGFA{} reaches $0.733$ versus prompt-naive
-$0.416$ on the same ten-task stream (single run,
-\texttt{kaggle\_pending\_experiments.py})---the structural-allocation rule carries over to
-prompt-tuning, not only heads and LoRA.
+The same frozen backbone also supports a \emph{prompt}-based instantiation beyond the
+linear head, and a pair of protocols brackets exactly when gating pays. When all tasks
+reuse one shared output head---the high-interference regime of a deployed adapter serving
+every task---gating the prompt and head updates lifts accuracy from $0.416$ to $0.733$
+(single run, \texttt{kaggle\_pending\_experiments.py}): the structural rule carries over to
+prompt space wherever interference is present. When each class instead owns its output row
+and logits are task-masked---a protocol that removes head interference by
+construction---naive prompt-tuning barely forgets ($0.017\pm0.016$) and the gate is
+statistically indistinguishable from it ($0.917\pm0.024$ vs $0.926\pm0.024$, paired
+$p=0.20$; five seeds, \texttt{kaggle\_vit\_multiseed.py}). The pair is the functional's own
+prediction made visible: the gate's benefit scales with the interference energy actually
+present, and vanishes when the protocol allocates disjoint parameters up front.
 
 \paragraph{Relation to prompt-pool methods.} L2P, DualPrompt, and CODA-Prompt
 \cite{wang2022l2p,wang2022dualprompt,smith2023coda} also operate on a frozen pretrained ViT backbone.
@@ -1096,6 +1102,20 @@ $r_{\rm eff}=\sum_j(1-\mathrm{keep}_j)$---are developed and validated in the Sup
 Information. Together with low-rank or diagonal Gauss--Newton approximations of $\bar H_A$,
 they suggest a practical route for carrying the architecture-general identity into fully
 fine-tuned deep networks at controlled cost.
+
+A further assumption deserves explicit statement: as presented, \IGFA{} assumes task
+boundaries are known and switches are abrupt at training time. Section~\ref{sec:algo} and
+Algorithm~1 use it most directly---the method processes ``each task $n$'' and forms a basis
+$B_n$ from that task's estimated second moment. The assumption is operational bookkeeping,
+not theory: the interference functional itself is boundary-free, and the machinery that
+removes the bookkeeping already appears in this paper. The recursive Gauss--Newton tracker
+replaces per-task second moments with a decayed running estimate, the subspace-velocity
+detector recovers unknown boundaries at recall and precision $1.00$ on clean streams, and
+their fully autonomous composition matches the oracle given the true boundaries
+(Sec.~\ref{si:extensions}). Gradual rather than abrupt transitions are the harder case;
+there the boundary concept itself blurs, and the drift experiments of
+Sec.~\ref{sec:exp:drift} show that the running estimate simply tracks the moving geometry
+without requiring a boundary at all.
 
 Several limitations bound these claims. Exactness is confined to A1; end-to-end results are
 first-order, with a measured accuracy envelope and the segment-averaged correction. The
