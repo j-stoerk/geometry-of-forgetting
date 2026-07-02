@@ -271,12 +271,15 @@ def report(tag, per_method, results):
         am, ah = ci95([v[0] for v in vals]); fm, fh = ci95([v[1] for v in vals])
         print(f"  {m:8s}  acc {am:.3f}+/-{ah:.3f}   forget {fm:.3f}+/-{fh:.3f}")
         results[f"{tag}/{m}"] = dict(acc=[v[0] for v in vals], forget=[v[1] for v in vals])
-    for a, b in [("igfa", "ogd"), ("igfa", "naive"), ("igfa", "replay")]:
+    for a, b in [("igfa", "ogd"), ("igfa", "naive"), ("igfa", "replay"),
+                 ("prompt-igfa", "prompt-naive")]:
         if a in per_method and b in per_method:
             xa = [v[0] for v in per_method[a]]; xb = [v[0] for v in per_method[b]]
             p = 1.0 if np.allclose(xa, xb) else stats.ttest_rel(xa, xb).pvalue
             print(f"  paired t-test acc {a} vs {b}: p={p:.4f}"
                   + ("  (identical runs)" if np.allclose(xa, xb) else ""))
+    with open("vit_multiseed_results.json", "w") as f:      # incremental dump: results
+        json.dump(results, f, indent=1)                     # survive a lost kernel
 
 # ------------------------- Y5: merge ablation ---------------------------
 def merge_ablation(feats, seed):
@@ -375,7 +378,10 @@ def prompt_stream(seed, method, device, cifar):
         bases.append(Bn)
         acc_after[t] = task_acc(t)
         log(f"  prompt-{method} seed{seed} task{t} done @{device} (acc {acc_after[t]:.3f})")
+    log(f"  prompt-{method} seed{seed}: final re-evaluation of all 10 tasks @{device} (~2 min)")
     final = np.array([task_acc(t) for t in range(10)])
+    log(f"  prompt-{method} seed{seed} FINISHED @{device} "
+        f"(final acc {final.mean():.3f}, forget {float((acc_after-final)[:-1].mean()):.3f})")
     del model; torch.cuda.empty_cache()
     return final.mean(), float((acc_after - final)[:-1].mean())
 
