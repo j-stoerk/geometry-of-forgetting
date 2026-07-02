@@ -324,6 +324,12 @@ def prompt_forward(model, P, img):
     for blk in model.blocks: x = blk(x)
     return model.norm(x)[:, 0]
 
+def tlog(msg):
+    """Thread-safe progress log for Y6: worker threads must NOT print to the notebook
+    stream (ipykernel can deadlock on multi-threaded prints) -- they append to a file."""
+    with open("y6_progress.log", "a") as f:
+        f.write(f"[{time.time()-T0:7.1f}s] {msg}\n")
+
 def prompt_stream(seed, method, device, cifar):
     from PIL import Image
     torch.manual_seed(seed); rng = np.random.default_rng(seed)
@@ -377,11 +383,11 @@ def prompt_stream(seed, method, device, cifar):
             Q = torch.linalg.qr(torch.cat(prot, 1))[0] if prot else None
         bases.append(Bn)
         acc_after[t] = task_acc(t)
-        log(f"  prompt-{method} seed{seed} task{t} done @{device} (acc {acc_after[t]:.3f})")
-    log(f"  prompt-{method} seed{seed}: final re-evaluation of all 10 tasks @{device} (~2 min)")
+        tlog(f"prompt-{method} seed{seed} task{t} done @{device} (acc {acc_after[t]:.3f})")
+    tlog(f"prompt-{method} seed{seed}: final re-evaluation of all 10 tasks @{device} (~2 min)")
     final = np.array([task_acc(t) for t in range(10)])
-    log(f"  prompt-{method} seed{seed} FINISHED @{device} "
-        f"(final acc {final.mean():.3f}, forget {float((acc_after-final)[:-1].mean()):.3f})")
+    tlog(f"prompt-{method} seed{seed} FINISHED @{device} "
+         f"(final acc {final.mean():.3f}, forget {float((acc_after-final)[:-1].mean()):.3f})")
     del model; torch.cuda.empty_cache()
     return final.mean(), float((acc_after - final)[:-1].mean())
 
@@ -430,11 +436,18 @@ if __name__ == "__main__":
         log("stage 3/3: Y6 prompt-igfa vs prompt-naive (full ViT forwards, seeds split on 2 GPUs)")
         cifar_imgs = (cif[0], cif[1], cif[3], cif[4])   # keep uint8 (N,32,32,3) arrays
         per = {"prompt-naive": [], "prompt-igfa": []}
+        from concurrent.futures import wait as fwait
         for m, key in [("naive", "prompt-naive"), ("igfa", "prompt-igfa")]:
             with ThreadPoolExecutor(len(DEVICES)) as ex:
-                futs = [ex.submit(prompt_stream, s, m, DEVICES[i % len(DEVICES)], cifar_imgs)
-                        for i, s in enumerate(SEEDS)]
-                per[key] = [f.result() for f in futs]
+                futs = {ex.submit(prompt_stream, s, m, DEVICES[i % len(DEVICES)], cifar_imgs): s
+                        for i, s in enumerate(SEEDS)}
+                pending = set(futs)
+                while pending:                              # heartbeat from the MAIN thread only
+                    done, pending = fwait(pending, timeout=120)
+                    for f in done: f.result()               # surface worker exceptions
+                    log(f"Y6 {key}: {len(SEEDS)-len(pending)}/{len(SEEDS)} seeds done "
+                        f"(details: y6_progress.log)")
+                per[key] = [f.result() for f in sorted(futs, key=lambda f: futs[f])]
         report("Y6-PromptCIFAR100", per, results)
 
     with open("vit_multiseed_results.json", "w") as f:
