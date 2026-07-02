@@ -8,10 +8,11 @@
 #  schedules (constant / cosine / linear x three peak LRs, with early-stop
 #  checkpoints) at MATCHED step budget on the same model and stream.
 #
-#  Model/stream: GPT-2 + manual LoRA (no peft), domain A = AG-News world,
-#  domain B = AG-News sci/tech (the most conflicting pair by probe cosine).
-#  Metrics: held-out loss on A (forgetting) and on B (adaptation) ->
-#  retention-plasticity frontiers; paired comparison at matched forgetting.
+#  Model/stream: GPT-2 + manual LoRA (no peft), domain A = AG-News (news
+#  register) -> domain B = IMDB reviews (register clash with real measured
+#  forgetting; v1's AG-News topic pair had NONE -- vacuous).  Pre-flight
+#  check verifies interference exists before the sweep.  Metrics: held-out
+#  loss on A (forgetting) and on B (adaptation) -> frontiers, both axes.
 #
 #  Kaggle 2x T4: seeds split across GPUs; worker threads log to
 #  interference_opt_progress.log (never to the notebook stream); results
@@ -100,11 +101,17 @@ def build_model(device):
     return m, loras
 
 def get_domains(tok):
+    """Domain A = AG-News (news register), domain B = IMDB (informal reviews):
+    a genuine register clash.  NOTE: v1 used two AG-News topics and produced
+    NEGATIVE forgetting (pure backward transfer) -- a vacuous benchmark; the
+    stream must contain real interference for controllers to differ."""
     from datasets import load_dataset
-    ds = load_dataset("ag_news", split="train")
     out = []
-    for c in [0, 3]:                                        # world vs sci/tech (most conflicting)
-        texts = [x["text"] for x in ds if x["label"] == c][:1500]
+    news = load_dataset("ag_news", split="train")
+    texts_a = [x["text"] for x in news if x["label"] == 0][:1500]
+    imdb = load_dataset("imdb", split="train")
+    texts_b = [x["text"] for x in imdb][:600]
+    for texts in (texts_a, texts_b):
         enc = tok("\n\n".join(texts), return_tensors="pt").input_ids[0]
         ch = enc[: (len(enc) // SEQ) * SEQ].view(-1, SEQ)
         out.append((ch[:120], ch[120:150]))
@@ -133,6 +140,21 @@ def run_seed(seed, device, doms):
         optA.zero_grad(); loss.backward(); optA.step()
     LA0 = heldout(model, teA, device)
     theta_ref = [p.detach().clone() for p in params]
+    # pre-flight: verify the stream actually forgets under plain SGD (else the
+    # benchmark cannot distinguish controllers -- abort loudly rather than
+    # produce a vacuous comparison)
+    snap0 = [p.detach().clone() for p in params]
+    o0 = torch.optim.SGD(params, lr=1e-3)
+    for k in range(STEPS):
+        i = torch.randint(0, len(trB) - BS, (1,)).item()
+        loss = lm_loss(model, trB[i:i+BS], device); o0.zero_grad(); loss.backward(); o0.step()
+    fgt0 = heldout(model, teA, device) - LA0
+    with torch.no_grad():
+        for p, s0 in zip(params, snap0): p.copy_(s0)
+    tlog(f"seed{seed} PRE-FLIGHT naive forgetting at lr=1e-3: {fgt0:+.3f}")
+    if fgt0 < 0.05:
+        tlog(f"seed{seed} WARNING: stream shows no interference (forgetting {fgt0:+.3f}); "
+             f"controller comparison will be vacuous on this stream.")
     # ---- collect task-A LoRA gradients and sketch the metric per-parameter ----
     grads = {p: [] for p in params}
     for k in range(48):
