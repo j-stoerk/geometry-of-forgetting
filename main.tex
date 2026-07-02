@@ -1174,8 +1174,9 @@ ablation of Fig.~\ref{fig:teaser} and Table~\ref{tab:compare};
 \texttt{evaluate\_applications.py} three more (physics-informed constraints, Fisher-metric
 policy gradients, floor-minimizing meta-learning);
 \texttt{evaluate\_next\_steps.py} the sketched-drift, trust-region, anchor-protection,
-probe-similarity, consolidation, floor-scheduled-memory, and dream-replay studies of
-Secs.~\ref{si:cheapgn}, \ref{si:llm}, and~\ref{si:memory};
+probe-similarity, consolidation, floor-scheduled-memory, dream-replay, cascade, and
+world-model studies of Secs.~\ref{si:cheapgn}, \ref{si:llm}, and~\ref{si:memory};
+\texttt{kaggle\_probe\_gate\_llm.py} the probe-gate protocol on similar text domains;
 \texttt{experiments\_drift.py} the $\sstar$ ablation, graceful-degradation, and drift figures;
 \texttt{experiments\_extra.py} the self-calibrating-$\sstar$ and tight multiclass-constant
 results; and \texttt{experiments\_roadmap.py} the feasibility-diagnostic, Frequent-Directions,
@@ -1459,7 +1460,9 @@ $3.21$ for the input gate under conflict, versus $2.20$ for the probe gate and $
 the oracle). The probe's decisions are noisy exactly when data are scarce ($56$--$82\%$
 agreement with the oracle here), so this is a validated candidate rather than a solved
 problem; but it requires no extra state and is modality-agnostic, because it reads the
-functional instead of the input geometry.
+functional instead of the input geometry. A runnable protocol for the real-text test---the
+probe gate against naive, protect-all, and the input gate on four similar news domains with
+sequential LoRA---is released as \texttt{kaggle\_probe\_gate\_llm.py}.
 
 \begin{table}[htb]\centering\small
 \caption{Sequential LoRA fine-tuning of GPT-2 on four dissimilar text domains (forgetting
@@ -1855,9 +1858,24 @@ functional decides when it is needed.
 sufficient statistic for replay: sampling $\hat x=U\Lambda^{1/2}z$ with labels from the
 snapshot and rehearsing on these ``dreamed'' pairs reduces the floor exactly as real replay
 does (mean forgetting $1.71$ versus $1.72$; seedwise agreement $r=0.97$) with zero stored
-examples. Replay and structural allocation are therefore not opposing families: the same
-low-rank state implements both, and buffer-free generative rehearsal inherits replay's floor
-reduction without its storage or privacy cost.
+examples. The construction extends to \emph{rollouts}: dreamed trajectories from a learned
+world model rehearse the old task nearly as well as real experience ($2.02$ versus $1.90$
+forgetting, against $4.23$ without replay) and degrade gracefully with model error ($2.48$
+at $20\%$ dynamics noise), so counterfactual replay inherits the floor reduction up to the
+world model's own fidelity. Replay and structural allocation are therefore not opposing
+families: the same low-rank state implements both, and buffer-free generative rehearsal
+inherits replay's floor reduction without its storage or privacy cost.
+
+\paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
+a one-step corruption of the transition operator compounds over the horizon: after
+fine-tuning a norm-preserving recurrence on an overlapping second task, naive rollout error
+grows from $0.86$ at one step to $1.00$ (full decorrelation) at thirty. Routing the
+fine-tuning update through $\ker\Sig_A$ keeps the old task's transition operator invariant,
+and the rollout error is zero at \emph{every} horizon---the cascade is blocked where it
+starts, not corrected downstream. Output-side correction (snapping generated states back
+onto the old task's subspace) removes leakage out of the subspace but cannot repair the
+corrupted dynamics inside it ($0.72\to0.99$): for autoregressive stability, where an update
+acts matters more than how its outputs are post-processed.
 
 % =====================================================================
 \clearpage
