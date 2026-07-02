@@ -79,8 +79,11 @@ def get_imagenet_r():
         tar = download("https://people.eecs.berkeley.edu/~hendrycks/imagenet-r.tar",
                        os.path.join(DATA, "imagenet-r.tar"))
         log("extracting imagenet-r.tar")
-        with tarfile.open(tar) as t: t.extractall(DATA)
-    wnids = sorted(os.listdir(root))
+        with tarfile.open(tar) as t:
+            try: t.extractall(DATA, filter="data")
+            except TypeError: t.extractall(DATA)
+    wnids = sorted(w for w in os.listdir(root)              # skip README.txt etc.
+                   if os.path.isdir(os.path.join(root, w)))
     files, labels = [], []
     for c, w in enumerate(wnids):
         for fn in sorted(os.listdir(os.path.join(root, w))):
@@ -99,7 +102,9 @@ def get_cub():
         tgz = download("https://data.caltech.edu/records/65de6-vp158/files/CUB_200_2011.tgz",
                        os.path.join(DATA, "cub.tgz"))
         log("extracting cub.tgz")
-        with tarfile.open(tgz) as t: t.extractall(DATA)
+        with tarfile.open(tgz) as t:
+            try: t.extractall(DATA, filter="data")
+            except TypeError: t.extractall(DATA)
     rd = lambda fn: [l.split() for l in open(os.path.join(root, fn))]
     paths = {i: p for i, p in rd("images.txt")}
     lab   = {i: int(c) - 1 for i, c in rd("image_class_labels.txt")}
