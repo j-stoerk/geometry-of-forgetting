@@ -1212,7 +1212,17 @@ identity predicts exactly; the Fisher information plays the role of $\Sig$ for p
 gradients in reinforcement learning; and a feature map can be meta-trained to shrink the
 distortion floor itself. These are directional demonstrations rather than benchmarks, but
 they indicate that the geometry is a property of shared parameterizations, not of the
-continual-learning protocol.
+continual-learning protocol. Read as a control problem, the calculus also subsumes the
+existing method families rather than competing with them: unconditional projection
+(\OGD{}/\textsc{gpm}), Fisher penalties (EWC), replay, per-task routing, and dynamic
+expansion are each the geometry-driven controller clamped to a single fixed
+action---always project, always penalize, always rehearse, always separate---while the
+signed gate is the regime-adaptive interior that reads the ledger and spends memory or
+rank only where the floor is positive. In a controlled comparison across regimes the
+adaptive rule is the Pareto point, strictly dominating every zero-resource fixed method
+and matching replay's retention at a fraction of its memory (runnable in
+\texttt{demo\_method\_taxonomy.py}, with the metric set and decision rules released as a
+standalone interference-ledger toolkit).
 
 Several algorithmic refinements---a self-calibrating threshold, low-cost $\mathcal{O}(rd)$
 online curvature via Frequent Directions
