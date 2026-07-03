@@ -1100,9 +1100,11 @@ transfer on similar text tasks without relaxing protection where conflict
 dominates. Two resolutions are developed in the Supporting Information: a probe-based
 similarity estimate validated in the exact regime (Sec.~\ref{si:llm}), and---the
 theorem-backed answer---the threshold-free functional gate of Sec.~\ref{si:beyond}, which
-reads the measured interference rate instead of any modality-specific similarity signal
-and carries a continuous-time monotone-retention guarantee; its real-text protocol is
-released with the paper. To validate the broad applicability of this framework, several extensions are detailed in
+reads the measured interference rate instead of any modality-specific similarity signal,
+carries a continuous-time monotone-retention guarantee, and delivers the gate's first
+measured real-text gain: on a four-domain LoRA stream it is the only method that improves
+on unconditional protection on both retention and adaptation simultaneously, in every
+seed (Sec.~\ref{si:llm}). To validate the broad applicability of this framework, several extensions are detailed in
 the Supporting Information. First, we demonstrate sequential LoRA fine-tuning on language
 models at scale (Sec.~\ref{si:llm}), using recursive Gauss--Newton tracking on the adapting
 features together with a modality-appropriate similarity gate for language. Second, the
@@ -1544,10 +1546,21 @@ $L_u$ can be estimated from a micro-cache of a few thousand tokens per domain, f
 anchor construction (Sec.~\ref{si:cheapgn}), or from the dream state
 (Sec.~\ref{si:memory}). The gate is validated in the exact regime and on jointly trained
 networks (near current-Gauss--Newton retention under conflict, near-naive adaptation under
-transfer, at one extra gradient per step); the real-text protocol---the sign gate against
-naive, protect-all, and the input gate on the four-domain stream with measured
-forgetting, logging the measured interference-rate map between all domain pairs---is
-released as \texttt{kaggle\_functional\_gate\_llm.py}.
+transfer, at one extra gradient per step). On real text it delivers the gate's first
+measured gain (GPT-2, sequential LoRA on news$\to$IMDB$\to$wikitext$\to$tweets, three
+seeds; \texttt{kaggle\_functional\_gate\_llm.py}, \texttt{func\_gate\_results.json}): the
+sign gate is the only method that improves on unconditional protection on \emph{both}
+axes simultaneously---average final loss $3.976\pm0.001$ against $3.993$ (protect-all),
+$4.003$ (naive), and $3.998$ (input gate), with forgetting $+0.285\pm0.005$ against
+$+0.308$, $+0.328$, and $+0.320$---better in every seed against every baseline
+(significant against naive and the input gate, paired $p=0.03$ and $p=0.001$;
+directionally consistent against protect-all at $n=3$, $p\approx0.06$). The measured
+interference-rate map locates the gain: news$\leftrightarrow$IMDB and
+tweets$\leftrightarrow$IMDB carry positive transfer ($+0.07$, $+0.06$) that protect-all
+forfeits, while wikitext conflicts with IMDB ($-0.03$), which naive and the input gate pay
+for. The margins are modest at this scale, but the mechanism---exploit measured transfer,
+block measured conflict, no threshold and no input geometry---is exactly the one the
+theory prescribes.
 
 Running the earlier probe protocol on real text (GPT-2, sequential LoRA on four AG-News
 topic domains, three seeds; \texttt{kaggle\_probe\_gate\_llm.py},
@@ -1963,7 +1976,8 @@ schedule Pareto-dominant at the low-forgetting end
 (\texttt{kaggle\_interference\_optimizer.py}). This is the stale-metric failure mode of
 Sec.~\ref{sec:exp:drift} in optimizer form---frozen geometry barely helps under joint
 training---and it points to the current-signal controller (the functional gate below and
-in Sec.~\ref{si:llm}) as the version predicted to survive scale. Under gradient noise, the
+in Sec.~\ref{si:llm}) as the version predicted to survive scale, a prediction the
+functional gate then confirmed on the same stream. Under gradient noise, the
 residual risk of protection
 itself obeys a verified diffusion law: with basis error at principal angle $\epsilon$, the
 noise-driven forgetting is $\tfrac12\eta^2\sigma^2 t\,r\sin^2\epsilon$ (measured-to-law
@@ -2101,7 +2115,9 @@ near-current-GN retention under conflict ($+0.14$ versus naive $+5.77$ and \emph
 projection $+5.38$, which barely helps under drift) with better adaptation than
 current-GN ($0.11$ versus $0.15$) at a fraction of its cost---one gradient of $L_A$ per
 step, from a micro-cache, the anchor construction of Sec.~\ref{si:cheapgn}, or the dream
-state of Sec.~\ref{si:memory} (\texttt{evaluate\_functional\_gate.py}).
+state of Sec.~\ref{si:memory} (\texttt{evaluate\_functional\_gate.py}). On real text it is
+the only method to improve on unconditional protection on both axes simultaneously
+(Sec.~\ref{si:llm}).
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
