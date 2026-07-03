@@ -1955,7 +1955,16 @@ subspace; intermediate budgets interpolate continuously between naive descent an
 protection. The controller's metric can also be sketched: at sketch size $\ell\ge2r$ the
 Frequent-Directions metric reproduces the full-covariance frontier to $1.3\pm0.5\%$ at
 $3.6\times$ less memory, while $\ell=r$ fails outright ($43\%$ gap)---the same $\ell=2r$
-sizing rule as Sec.~\ref{si:cheapgn}. Under gradient noise, the residual risk of protection
+sizing rule as Sec.~\ref{si:cheapgn}. At language-model scale, however, the advantage does
+not persist in this form: on a four-domain sequential LoRA stream with real measured
+forgetting, a \emph{frozen}-sketch penalty and tuned Adam schedules trace statistically
+indistinguishable frontiers ($\pm0.2\%$ at matched forgetting, two seeds), with the
+schedule Pareto-dominant at the low-forgetting end
+(\texttt{kaggle\_interference\_optimizer.py}). This is the stale-metric failure mode of
+Sec.~\ref{sec:exp:drift} in optimizer form---frozen geometry barely helps under joint
+training---and it points to the current-signal controller (the functional gate below and
+in Sec.~\ref{si:llm}) as the version predicted to survive scale. Under gradient noise, the
+residual risk of protection
 itself obeys a verified diffusion law: with basis error at principal angle $\epsilon$, the
 noise-driven forgetting is $\tfrac12\eta^2\sigma^2 t\,r\sin^2\epsilon$ (measured-to-law
 ratio $1.05$--$1.07$ across $\eta$ and $\epsilon$; exactly zero at $\epsilon=0$), which
