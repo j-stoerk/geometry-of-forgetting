@@ -60,9 +60,11 @@ class LoRA(nn.Module):
 
 def build_model(name, device):
     from transformers import AutoModelForCausalLM
-    # torch_dtype=float32: pythia checkpoints are fp16 and would otherwise load in
-    # Half while the LoRA parameters are Float -> dtype mismatch in the forward.
-    m = AutoModelForCausalLM.from_pretrained(name, torch_dtype=torch.float32).to(device)
+    # pythia checkpoints are fp16; newer transformers loaders can ignore the
+    # torch_dtype kwarg, so force fp32 AFTER loading -- .float() converts every
+    # parameter and buffer unconditionally (LoRA params are fp32).
+    m = AutoModelForCausalLM.from_pretrained(name)
+    m = m.float().to(device)
     for p in m.parameters(): p.requires_grad_(False)
     loras = []
     if hasattr(m, "transformer"):                       # GPT-2
