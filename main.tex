@@ -1097,8 +1097,12 @@ mechanism transfers, while the right similarity signal for language remains open
 The main open design question is therefore not the structural retention mechanism, which
 transfers across modalities, but a similarity signal for language that can recover
 transfer on similar text tasks without relaxing protection where conflict
-dominates; a probe-based candidate for that signal is validated in the exact regime in
-Sec.~\ref{si:llm}. To validate the broad applicability of this framework, several extensions are detailed in
+dominates. Two resolutions are developed in the Supporting Information: a probe-based
+similarity estimate validated in the exact regime (Sec.~\ref{si:llm}), and---the
+theorem-backed answer---the threshold-free functional gate of Sec.~\ref{si:beyond}, which
+reads the measured interference rate instead of any modality-specific similarity signal
+and carries a continuous-time monotone-retention guarantee; its real-text protocol is
+released with the paper. To validate the broad applicability of this framework, several extensions are detailed in
 the Supporting Information. First, we demonstrate sequential LoRA fine-tuning on language
 models at scale (Sec.~\ref{si:llm}), using recursive Gauss--Newton tracking on the adapting
 features together with a modality-appropriate similarity gate for language. Second, the
@@ -1216,7 +1220,9 @@ end-to-end drift-and-noise probe on a gradient-trained network,
 \texttt{evaluate\_unlearning\_real.py} the real-data unlearning study,
 \texttt{evaluate\_upgrades.py} the noise-law, rate-controller, allocation, privacy, and
 damping upgrades, \texttt{evaluate\_beyond\_a1.py} the function-space validations of
-Sec.~\ref{si:beyond}, and \texttt{fig\_stream\_density.py} the share-density figure;
+Sec.~\ref{si:beyond}, \texttt{evaluate\_functional\_gate.py} the threshold-free
+functional gate (with \texttt{kaggle\_functional\_gate\_llm.py} its real-text protocol),
+and \texttt{fig\_stream\_density.py} the share-density figure;
 \texttt{kaggle\_interference\_optimizer.py} (the \textsc{InterferenceSGD} benchmark against
 tuned learning-rate schedules) and \texttt{kaggle\_scale\_addons.py} (per-layer text
 similarity, real-feature $\Sig_{\rm eval}$, and the pythia-160m capacity ledger) extend
@@ -1527,9 +1533,25 @@ agreement with the oracle here), so this is a validated candidate rather than a 
 problem; but it requires no extra state and is modality-agnostic, because it reads the
 functional instead of the input geometry.
 
-Running that protocol on real text (GPT-2, sequential LoRA on four AG-News topic domains,
-three seeds; \texttt{kaggle\_probe\_gate\_llm.py}, \texttt{probe\_gate\_results.json})
-yields three findings. First, the probe signal transfers: the probe cosines form a stable,
+\paragraph{The language gate, resolved in function space.} The function-space formalism
+(Sec.~\ref{si:beyond}) dissolves the problem rather than patching it: the gate should
+never have read input geometry at all. The correct, modality-free signal is the
+\emph{interference rate} $\langle\nabla L_u,g\rangle$ of the new update $g$ against each
+stored domain $u$---a quantity that includes the targets, which is precisely what input
+overlap misses on text---and the gating rule is a threshold-free sign test with a
+continuous-time monotone-retention guarantee (Sec.~\ref{si:beyond}). Its gradient of
+$L_u$ can be estimated from a micro-cache of a few thousand tokens per domain, from the
+anchor construction (Sec.~\ref{si:cheapgn}), or from the dream state
+(Sec.~\ref{si:memory}). The gate is validated in the exact regime and on jointly trained
+networks (near current-Gauss--Newton retention under conflict, near-naive adaptation under
+transfer, at one extra gradient per step); the real-text protocol---the sign gate against
+naive, protect-all, and the input gate on the four-domain stream with measured
+forgetting, logging the measured interference-rate map between all domain pairs---is
+released as \texttt{kaggle\_functional\_gate\_llm.py}.
+
+Running the earlier probe protocol on real text (GPT-2, sequential LoRA on four AG-News
+topic domains, three seeds; \texttt{kaggle\_probe\_gate\_llm.py},
+\texttt{probe\_gate\_results.json}) yields three findings. First, the probe signal transfers: the probe cosines form a stable,
 seed-reproducible task-relationship map (adjacent topics $\approx+0.10$, world versus
 sci/tech $\approx-0.18$) precisely where input overlap is uninformative. Second, the map
 shows that these topic slices are \emph{not} a similar-task stream in the functional sense:
@@ -2048,6 +2070,29 @@ continuous-time retention guarantee never needed it. The recursive Gauss--Newton
 of Sec.~\ref{sec:algo} is the discretization of this exact law, with the finite-step,
 estimation, and capacity costs quantified in Secs.~\ref{sec:exp:drift},
 \ref{si:cheapgn}, and~\ref{si:memory}.
+
+\paragraph{Monotone-retention gating: the threshold-free gate.} The path integral also
+yields the gate itself, with the similarity threshold removed. Since
+$dL_A/dt=\langle\nabla L_A,\dot\theta\rangle$, the exact, modality-free rule is a
+\emph{sign test}: given the new task's update direction $g$, if
+$\langle g,\nabla L_A\rangle\ge0$ the step also descends (or preserves) $L_A$ and is kept
+whole; otherwise only its component along $\nabla L_A$ is removed,
+$g\mapsto g-\frac{\langle g,\nabla L_A\rangle}{\|\nabla L_A\|^2}\nabla L_A$. In continuous
+time this guarantees $dL_A/dt\le0$---retention is monotone---while every non-harmful
+component of the update, and therefore all transfer, is retained; no threshold, no input
+geometry, and no similarity estimate appears. The single-constraint form recovers the
+projections of A-GEM \cite{chaudhry2019} and the surgery of PCGrad \cite{yu2020pcgrad} as
+special cases, here derived from the exact identity rather than posited; per-direction
+refinements in the current $G_A$-eigenbasis coincide with the single constraint at $A$'s
+optimum (every range-component of motion is harmful there) and differ off-optimum. In the
+exact regime the sign gate holds forgetting at $0.025$ versus naive $10.06$ under pure
+conflict while reaching strictly lower deferred loss than unconditional projection ($9.08$
+versus $10.06$), and is harmless under alignment; on jointly trained networks it attains
+near-current-GN retention under conflict ($+0.14$ versus naive $+5.77$ and \emph{frozen}
+projection $+5.38$, which barely helps under drift) with better adaptation than
+current-GN ($0.11$ versus $0.15$) at a fraction of its cost---one gradient of $L_A$ per
+step, from a micro-cache, the anchor construction of Sec.~\ref{si:cheapgn}, or the dream
+state of Sec.~\ref{si:memory} (\texttt{evaluate\_functional\_gate.py}).
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
