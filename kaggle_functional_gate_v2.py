@@ -63,7 +63,7 @@ def tlog(m):
         f.write(f"[{time.time()-T0:7.1f}s] {m}\n")
 
 
-SCRIPT_VERSION = "v2.9-randint-fixed"
+SCRIPT_VERSION = "v3.0-fp32-forced"
 
 
 class LoRA(nn.Module):
@@ -114,20 +114,28 @@ def check_named_tensors_finite(named_tensors, where):
 def build_model(name, device):
     from transformers import AutoModelForCausalLM
 
-    m = AutoModelForCausalLM.from_pretrained(name)
-    m = m.float().to(device)
+    # Load in fp32 up front so lazy/meta materialization never produces fp16.
+    m = AutoModelForCausalLM.from_pretrained(name, torch_dtype=torch.float32)
+    m = m.to(device)
     if getattr(m.config, "use_cache", None) is not None:
         m.config.use_cache = False
 
-    bad = [
-        n for n, p in list(m.named_parameters()) + list(m.named_buffers())
-        if p.is_floating_point() and p.dtype != torch.float32
-    ]
+    # Belt-and-suspenders: force every floating tensor to fp32 IN PLACE.  This
+    # sticks even when .float() on a lazily-materialized model does not, because
+    # the params are real tensors by now.
+    with torch.no_grad():
+        for p in m.parameters():
+            if p.is_floating_point() and p.dtype != torch.float32:
+                p.data = p.data.float()
+        for b in m.buffers():
+            if b.is_floating_point() and b.dtype != torch.float32:
+                b.data = b.data.float()
+
+    bad = [n for n, p in list(m.named_parameters()) + list(m.named_buffers())
+           if p.is_floating_point() and p.dtype != torch.float32]
     if bad:
-        tlog(
-            f"NOTE: {len(bad)} tensors not fp32 after .float() "
-            f"(e.g. {bad[:3]}); LoRA forward is dtype-safe, continuing."
-        )
+        tlog(f"NOTE: {len(bad)} tensors still not fp32 (e.g. {bad[:3]}); "
+             f"projection/gate are dtype-safe, continuing.")
 
     for p in m.parameters():
         p.requires_grad_(False)
@@ -268,16 +276,16 @@ def run_stream(seed, method, device, doms, model_name):
         grads = []
         for p in params:
             if p.grad is None:
-                grads.append(torch.zeros_like(p).flatten())
+                grads.append(torch.zeros(p.numel(), device=p.device, dtype=torch.float32))
             else:
-                grads.append(p.grad.detach().flatten())
+                grads.append(p.grad.detach().flatten().float())   # dtype-insured
         return torch.cat(grads)
 
     def setgrad(g):
         i = 0
         for p in params:
             n = p.numel()
-            p.grad = g[i:i + n].view_as(p).clone()
+            p.grad = g[i:i + n].view_as(p).clone().to(p.dtype)   # match param dtype
             i += n
 
     def precond():
@@ -333,7 +341,9 @@ def run_stream(seed, method, device, doms, model_name):
                 with torch.no_grad():
                     for l, Q in zip(loras, Qs):
                         if Q is not None and Q.numel() > 0 and Q.shape[1] > 0:
-                            l.A.grad -= Q @ (Q.T @ l.A.grad)
+                            Ag = l.A.grad
+                            Qm = Q.to(Ag.dtype)                 # dtype-safe projection
+                            l.A.grad = Ag - Qm @ (Qm.T @ Ag)
 
             elif method in ("func-sign", "func-sign-adam") and t > 0:
                 g = gvec()
