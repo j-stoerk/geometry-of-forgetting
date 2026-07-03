@@ -1,22 +1,25 @@
 # =====================================================================
-#  kaggle_interference_optimizer.py -- Q12 at scale: is the practical
+#  kaggle_interference_optimizer.py (v3) -- Q12 at scale: is the practical
 #  successor to the igfa gate an OPTIMIZER?
 #
-#  InterferenceSGD: plain SGD on  L_B + (mu/2)(theta-theta_ref)^T S (theta-theta_ref),
-#  where S is a Frequent-Directions sketch of task A's LoRA-gradient second
-#  moment (memory O(ell * P_lora)).  Benchmarked against TUNED learning-rate
-#  schedules (constant / cosine / linear x three peak LRs, with early-stop
-#  checkpoints) at MATCHED step budget on the same model and stream.
+#  LESSONS FROM v1/v2 (kept for honesty): single-hop text fine-tuning at
+#  LoRA scale does NOT forget -- both an AG-News topic pair and a
+#  news->IMDB register clash produced forgetting <= 0 (pure backward
+#  transfer), making any controller comparison vacuous.  The regime the
+#  paper measured as forgetting (Table S3: 0.64-1.21) is the FOUR-domain
+#  sequential stream under Adam.  v3 benchmarks there.
 #
-#  Model/stream: GPT-2 + manual LoRA (no peft), domain A = AG-News (news
-#  register) -> domain B = IMDB reviews (register clash with real measured
-#  forgetting; v1's AG-News topic pair had NONE -- vacuous).  Pre-flight
-#  check verifies interference exists before the sweep.  Metrics: held-out
-#  loss on A (forgetting) and on B (adaptation) -> frontiers, both axes.
+#  Design: GPT-2 + manual LoRA, sequential stream news -> imdb -> wikitext
+#  -> tweets.  Arm 1: tuned Adam schedules (kind x peak grid).  Arm 2: the
+#  SAME Adam at fixed lr plus the interference penalty IN THE LOSS,
+#  L_t + mu/2 sum_{u<t} ||V_u (theta - theta_u)||^2_{s2u}, with per-domain
+#  Frequent-Directions sketches of LoRA gradients (so any base optimizer
+#  works).  Pre-flight verifies the stream actually forgets before the
+#  sweep.  Frontier = (forgetting after full stream, avg final loss);
+#  compared on common support, both axes.
 #
-#  Kaggle 2x T4: seeds split across GPUs; worker threads log to
-#  interference_opt_progress.log (never to the notebook stream); results
-#  dumped incrementally to interference_opt_results.json.  ~45 min.
+#  Kaggle 2x T4, ~1 h with SEEDS=[0,1].  Progress -> file (never prints
+#  from worker threads); results dumped incrementally.
 # =====================================================================
 import os, json, time
 import numpy as np
@@ -24,15 +27,15 @@ import torch, torch.nn as nn
 from concurrent.futures import ThreadPoolExecutor, wait as fwait
 from scipy import stats
 
-SEEDS      = [0, 1, 2]
-STEPS      = 300          # per configuration (matched budget)
+SEEDS      = [0, 1]
+STEPS      = 250              # per domain per configuration
 BS, SEQ    = 8, 128
 RANK_LORA  = 8
-ELL        = 2 * RANK_LORA        # FD sketch rows (the ell>=2r sizing rule)
-MU_GRID    = list(np.geomspace(0.03, 100.0, 8))
-SCHEDULES  = [(kind, peak) for kind in ["constant", "cosine", "linear"]
-              for peak in [1e-4, 3e-4, 1e-3]]
-CKPT_EVERY = 30           # early-stop checkpoints along each schedule
+ELL        = 16               # FD sketch rows per (param, domain)
+MU_GRID    = [0.3, 3.0, 30.0, 300.0]
+SCHEDULES  = [(k, p) for k in ["constant", "cosine"] for p in [1e-4, 3e-4, 1e-3]]
+PEN_SCHEDULES = [(k, p) for k in ["constant", "cosine"] for p in [3e-4, 1e-3]]
+BASE_LR    = 3e-4             # fixed lr for the interference arm
 DEVICES = [f"cuda:{i}" for i in range(torch.cuda.device_count())] or ["cpu"]
 T0 = time.time()
 def log(m): print(f"[{time.time()-T0:7.1f}s] {m}", flush=True)
@@ -41,16 +44,11 @@ def tlog(m):
         f.write(f"[{time.time()-T0:7.1f}s] {m}\n")
 
 
-# ---------------------- InterferenceSGD (the artifact) ----------------------
 class InterferenceSGD(torch.optim.Optimizer):
-    """SGD on L_B plus an interference trust-region penalty in a sketched metric.
-
-    For each parameter p with reference p_ref and sketch factors (V, s2) --
-    rows V (ell x numel) and squared singular values s2 (ell,) of a
-    Frequent-Directions sketch of the old task's gradient second moment --
-    the update is  g + mu * V^T diag(s2) V (p - p_ref),  cost O(ell * numel).
-    mu -> 0 recovers SGD; mu -> inf recovers null-space projection (the gate).
-    """
+    """Reference artifact: SGD with the sketched interference penalty applied in
+    the update (see paper Sec. 'Memory systems and control').  The benchmark
+    below applies the identical penalty in the LOSS instead, so that any base
+    optimizer (here Adam) can carry it; the two are equivalent for SGD."""
     def __init__(self, params, lr, mu=0.0):
         super().__init__(params, dict(lr=lr, mu=mu))
     @torch.no_grad()
@@ -62,15 +60,13 @@ class InterferenceSGD(torch.optim.Optimizer):
                 st = self.state.get(p, {})
                 if group["mu"] > 0 and "V" in st:
                     dp = (p - st["ref"]).flatten()
-                    pen = st["V"].T @ (st["s2"] * (st["V"] @ dp))
-                    g = g + group["mu"] * pen.view_as(p)
+                    g = g + group["mu"] * (st["V"].T @ (st["s2"] * (st["V"] @ dp))).view_as(p)
                 p.add_(g, alpha=-group["lr"])
     def set_metric(self, p, V, s2, ref):
         self.state[p] = dict(V=V, s2=s2, ref=ref.detach().clone())
 
 
 def fd_sketch(G, ell):
-    """Frequent Directions of gradient rows G (m x P) -> (V rows ell x P, s2)."""
     sk = np.zeros((ell, G.shape[1]), dtype=np.float32)
     for i in range(0, len(G), ell):
         B = np.vstack([sk, G[i:i + ell]])
@@ -81,7 +77,6 @@ def fd_sketch(G, ell):
     return Vt[:ell].astype(np.float32), (s[:ell] ** 2).astype(np.float32)
 
 
-# ------------------------- model + data (as probe-gate) ---------------------
 class LoRA(nn.Module):
     def __init__(self, base, d_in, d_out, r, device):
         super().__init__(); self.base, self.s = base, 2.0 / r
@@ -101,21 +96,22 @@ def build_model(device):
     return m, loras
 
 def get_domains(tok):
-    """Domain A = AG-News (news register), domain B = IMDB (informal reviews):
-    a genuine register clash.  NOTE: v1 used two AG-News topics and produced
-    NEGATIVE forgetting (pure backward transfer) -- a vacuous benchmark; the
-    stream must contain real interference for controllers to differ."""
+    """news -> imdb -> wikitext -> tweets: the Table-S3 regime that forgets."""
     from datasets import load_dataset
-    out = []
+    chunks = []
     news = load_dataset("ag_news", split="train")
-    texts_a = [x["text"] for x in news if x["label"] == 0][:1500]
+    texts = ["\n\n".join([x["text"] for x in news if x["label"] == 0][:1500])]
     imdb = load_dataset("imdb", split="train")
-    texts_b = [x["text"] for x in imdb][:600]
-    for texts in (texts_a, texts_b):
-        enc = tok("\n\n".join(texts), return_tensors="pt").input_ids[0]
+    texts.append("\n\n".join([x["text"] for x in imdb][:600]))
+    wiki = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+    texts.append("\n\n".join([x["text"] for x in wiki if len(x["text"]) > 200][:1200]))
+    tw = load_dataset("tweet_eval", "sentiment", split="train")
+    texts.append("\n\n".join([x["text"] for x in tw][:4000]))
+    for t in texts:
+        enc = tok(t, return_tensors="pt").input_ids[0]
         ch = enc[: (len(enc) // SEQ) * SEQ].view(-1, SEQ)
-        out.append((ch[:120], ch[120:150]))
-    return out
+        chunks.append((ch[:110], ch[110:135]))
+    return chunks
 
 def lm_loss(model, ids, device): return model(ids.to(device), labels=ids.to(device)).loss
 
@@ -129,76 +125,92 @@ def heldout(model, chunks, device):
 
 def run_seed(seed, device, doms):
     torch.manual_seed(seed)
-    (trA, teA), (trB, teB) = doms
     model, loras = build_model(device)
     params = [p for l in loras for p in (l.A, l.B)]
-    # ---- train domain A ----
-    optA = torch.optim.Adam(params, lr=3e-4)
-    for k in range(STEPS):
-        i = torch.randint(0, len(trA) - BS, (1,)).item()
-        loss = lm_loss(model, trA[i:i+BS], device)
-        optA.zero_grad(); loss.backward(); optA.step()
-    LA0 = heldout(model, teA, device)
-    theta_ref = [p.detach().clone() for p in params]
-    # pre-flight: verify the stream actually forgets under plain SGD (else the
-    # benchmark cannot distinguish controllers -- abort loudly rather than
-    # produce a vacuous comparison)
-    snap0 = [p.detach().clone() for p in params]
-    o0 = torch.optim.SGD(params, lr=1e-3)
-    for k in range(STEPS):
-        i = torch.randint(0, len(trB) - BS, (1,)).item()
-        loss = lm_loss(model, trB[i:i+BS], device); o0.zero_grad(); loss.backward(); o0.step()
-    fgt0 = heldout(model, teA, device) - LA0
-    with torch.no_grad():
-        for p, s0 in zip(params, snap0): p.copy_(s0)
-    tlog(f"seed{seed} PRE-FLIGHT naive forgetting at lr=1e-3: {fgt0:+.3f}")
-    if fgt0 < 0.05:
-        tlog(f"seed{seed} WARNING: stream shows no interference (forgetting {fgt0:+.3f}); "
-             f"controller comparison will be vacuous on this stream.")
-    # ---- collect task-A LoRA gradients and sketch the metric per-parameter ----
-    grads = {p: [] for p in params}
-    for k in range(48):
-        i = torch.randint(0, len(trA) - BS, (1,)).item()
-        loss = lm_loss(model, trA[i:i+BS], device)
+
+    def train_domain(tr, steps, lr_fn, penalty=None):
+        opt = torch.optim.Adam(params, lr=lr_fn(0))
+        for k in range(steps):
+            for gset in opt.param_groups: gset["lr"] = lr_fn(k)
+            i = torch.randint(0, len(tr) - BS, (1,)).item()
+            loss = lm_loss(model, tr[i:i + BS], device)
+            if penalty is not None: loss = loss + penalty()
+            opt.zero_grad(); loss.backward(); opt.step()
+
+    def stream(lr_fn, mu=0.0):
+        """Run the full 4-domain stream; returns (forgetting, avg final loss)."""
+        # domain 0 is always plain (same for both arms)
+        for p, s0 in zip(params, snap_d0):
+            with torch.no_grad(): p.copy_(s0)
+        sketches = dict(d0_metrics)                            # {(param_idx, dom): (V, s2, ref)}
+        diag = [held_d0]
+        for t in range(1, 4):
+            if mu > 0:
+                mats = [(pi, dom, torch.tensor(V, device=device), torch.tensor(s2, device=device), ref.to(device))
+                        for (pi, dom), (V, s2, ref) in sketches.items()]
+                def penalty():
+                    tot = 0.0
+                    for pi, dom, V, s2, ref in mats:
+                        dp = (params[pi] - ref).flatten()
+                        tot = tot + 0.5 * mu * torch.sum(s2 * (V @ dp) ** 2)
+                    return tot
+            else:
+                penalty = None
+            train_domain(doms[t][0], STEPS, lr_fn, penalty)
+            diag.append(heldout(model, doms[t][1], device))
+            if mu > 0 and t < 3:                # sketches are only consumed by the penalty arm
+                grads = {pi: [] for pi in range(len(params))}
+                for k in range(24):
+                    i = torch.randint(0, len(doms[t][0]) - BS, (1,)).item()
+                    loss = lm_loss(model, doms[t][0][i:i+BS], device)
+                    model.zero_grad(); loss.backward()
+                    for pi, p in enumerate(params):
+                        grads[pi].append(p.grad.detach().flatten().cpu().numpy())
+                for pi in grads:
+                    V, s2 = fd_sketch(np.stack(grads[pi]), ELL)
+                    sketches[(pi, t)] = (V, s2, params[pi].detach().clone())
+        finals = [heldout(model, doms[i][1], device) for i in range(4)]
+        fgt = float(np.mean([finals[i] - diag[i] for i in range(3)]))
+        return fgt, float(np.mean(finals))
+
+    # ---- shared domain-0 training + its sketch ----
+    train_domain(doms[0][0], STEPS, lambda k: 3e-4)
+    held_d0 = heldout(model, doms[0][1], device)
+    snap_d0 = [p.detach().clone() for p in params]
+    grads = {pi: [] for pi in range(len(params))}
+    for k in range(24):
+        i = torch.randint(0, len(doms[0][0]) - BS, (1,)).item()
+        loss = lm_loss(model, doms[0][0][i:i+BS], device)
         model.zero_grad(); loss.backward()
-        for p in params: grads[p].append(p.grad.detach().flatten().cpu().numpy())
-    metrics = {p: fd_sketch(np.stack(grads[p]), ELL) for p in params}
-    snap = [p.detach().clone() for p in params]
-    def restore():
-        with torch.no_grad():
-            for p, s in zip(params, snap): p.copy_(s)
+        for pi, p in enumerate(params):
+            grads[pi].append(p.grad.detach().flatten().cpu().numpy())
+    d0_metrics = {}
+    for pi in grads:
+        V, s2 = fd_sketch(np.stack(grads[pi]), ELL)
+        d0_metrics[(pi, 0)] = (V, s2, params[pi].detach().clone())
+    # ---- pre-flight: does this stream forget at all? ----
+    fgt0, _ = stream(lambda k: 1e-3, mu=0.0)
+    tlog(f"seed{seed} PRE-FLIGHT naive Adam@1e-3 stream forgetting: {fgt0:+.3f}")
+    if fgt0 < 0.05:
+        tlog(f"seed{seed} WARNING: stream shows no interference; comparison will be vacuous.")
+    # ---- arm 1: tuned schedules (dict entries, same schema as arm 2) ----
     frontier = {"schedule": [], "interference": []}
-    # ---- (a) tuned LR schedules with early-stop checkpoints ----
+    def mk_lr(kind, peak):
+        return ((lambda k: peak) if kind == "constant"
+                else (lambda k: peak * 0.5 * (1 + np.cos(np.pi * k / STEPS))))
     for kind, peak in SCHEDULES:
-        restore()
-        opt = torch.optim.SGD(params, lr=peak)
-        for k in range(STEPS):
-            lr = peak * (1.0 if kind == "constant" else
-                         0.5 * (1 + np.cos(np.pi * k / STEPS)) if kind == "cosine" else
-                         (1 - k / STEPS))
-            for gset in opt.param_groups: gset["lr"] = lr
-            i = torch.randint(0, len(trB) - BS, (1,)).item()
-            loss = lm_loss(model, trB[i:i+BS], device)
-            opt.zero_grad(); loss.backward(); opt.step()
-            if (k + 1) % CKPT_EVERY == 0:
-                frontier["schedule"].append((heldout(model, teA, device) - LA0,
-                                             heldout(model, teB, device)))
-        tlog(f"seed{seed} schedule {kind}/{peak:g} done @{device}")
-    # ---- (b) InterferenceSGD over the mu grid, fixed lr ----
-    for mu in MU_GRID:
-        restore()
-        opt = InterferenceSGD(params, lr=3e-4, mu=mu)
-        for p, ref in zip(params, theta_ref):
-            V, s2 = metrics[p]
-            opt.set_metric(p, torch.tensor(V, device=device),
-                           torch.tensor(s2, device=device), ref)
-        for k in range(STEPS):
-            i = torch.randint(0, len(trB) - BS, (1,)).item()
-            loss = lm_loss(model, trB[i:i+BS], device)
-            opt.zero_grad(); loss.backward(); opt.step()
-        frontier["interference"].append((heldout(model, teA, device) - LA0,
-                                         heldout(model, teB, device)))
-        tlog(f"seed{seed} InterferenceSGD mu={mu:g} done @{device}")
+        forget, avg = stream(mk_lr(kind, peak), mu=0.0)
+        frontier["schedule"].append(dict(schedule=kind, peak_lr=float(peak), mu=0.0,
+                                         forget=float(forget), avg=float(avg)))
+        tlog(f"seed{seed} schedule {kind}/{peak:g}: forget {forget:+.3f} avg {avg:.3f}")
+    # ---- arm 2: interference penalty, base lr tuned symmetrically ----
+    for kind, peak in PEN_SCHEDULES:
+        for mu in MU_GRID:
+            forget, avg = stream(mk_lr(kind, peak), mu=mu)
+            frontier["interference"].append(dict(schedule=kind, peak_lr=float(peak),
+                                                 mu=float(mu), forget=float(forget),
+                                                 avg=float(avg)))
+            tlog(f"seed{seed} penalty {kind}/{peak:g} mu={mu:g}: forget {forget:+.3f} avg {avg:.3f}")
     del model; torch.cuda.empty_cache()
     return frontier
 
@@ -208,7 +220,7 @@ if __name__ == "__main__":
     from transformers import GPT2TokenizerFast
     tok = GPT2TokenizerFast.from_pretrained("gpt2")
     doms = get_domains(tok)
-    log("domains ready (world -> sci/tech)")
+    log("domains ready: news -> imdb -> wikitext -> tweets")
     per = {}
     with ThreadPoolExecutor(len(DEVICES)) as ex:
         futs = {ex.submit(run_seed, s, DEVICES[i % len(DEVICES)], doms): s
@@ -221,17 +233,6 @@ if __name__ == "__main__":
                 f"(details: interference_opt_progress.log)")
             with open("interference_opt_results.json", "w") as f:
                 json.dump({str(k): v for k, v in per.items()}, f, indent=1)
-    # ---- frontier comparison at matched forgetting ----
-    print("\n===== new-domain loss at matched forgetting (mean over seeds) =====")
-    gains = {f: [] for f in [0.05, 0.15, 0.4]}
-    for s in SEEDS:
-        fs = np.array(sorted(per[s]["schedule"])); fi = np.array(sorted(per[s]["interference"]))
-        for f in gains:
-            ls = np.interp(f, fs[:, 0], fs[:, 1]); li = np.interp(f, fi[:, 0], fi[:, 1])
-            gains[f].append((ls, li))
-    for f, v in gains.items():
-        ls = np.mean([x[0] for x in v]); li = np.mean([x[1] for x in v])
-        p = stats.ttest_rel([x[0] for x in v], [x[1] for x in v]).pvalue
-        print(f"  forgetting {f:.2f}: tuned-LR {ls:.3f}   InterferenceSGD {li:.3f}   "
-              f"({100*(ls-li)/ls:+.1f}%, p={p:.3f})")
+    from analyze_interference_opt import report
+    report({str(k): v for k, v in per.items()})
     log("ALL DONE -> interference_opt_results.json")
