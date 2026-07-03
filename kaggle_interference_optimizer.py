@@ -25,7 +25,6 @@ import os, json, time
 import numpy as np
 import torch, torch.nn as nn
 from concurrent.futures import ThreadPoolExecutor, wait as fwait
-from scipy import stats
 
 SEEDS      = [0, 1]
 STEPS      = 250              # per domain per configuration
@@ -233,6 +232,55 @@ if __name__ == "__main__":
                 f"(details: interference_opt_progress.log)")
             with open("interference_opt_results.json", "w") as f:
                 json.dump({str(k): v for k, v in per.items()}, f, indent=1)
-    from analyze_interference_opt import report
-    report({str(k): v for k, v in per.items()})
+    # ---------------- inlined shape-agnostic report (self-contained) ----------------
+    def to_xy(entries):
+        return np.array(sorted((float(e["forget"]), float(e["avg"])) for e in entries))
+    def pareto(pts):
+        keep = []
+        for i, (f, a) in enumerate(pts):
+            if not any((pts[j, 0] <= f and pts[j, 1] <= a and j != i
+                        and (pts[j, 0] < f or pts[j, 1] < a)) for j in range(len(pts))):
+                keep.append((f, a))
+        return np.array(sorted(keep))
+    print("\n===== frontier comparison (common support, both axes) =====")
+    for s in SEEDS:
+        fs, fi = to_xy(per[s]["schedule"]), to_xy(per[s]["interference"])
+        print(f"  seed {s}: schedule forgetting [{fs[:,0].min():+.3f},{fs[:,0].max():+.3f}] "
+              f"avg [{fs[:,1].min():.3f},{fs[:,1].max():.3f}] | penalty forgetting "
+              f"[{fi[:,0].min():+.3f},{fi[:,0].max():+.3f}] avg [{fi[:,1].min():.3f},{fi[:,1].max():.3f}]")
+    print("  --- avg final loss at matched forgetting (percent of common range) ---")
+    for frac in [0.25, 0.5, 0.75]:
+        ls, li = [], []
+        for s in SEEDS:
+            fs, fi = to_xy(per[s]["schedule"]), to_xy(per[s]["interference"])
+            lo = max(fs[:, 0].min(), fi[:, 0].min()); hi = min(fs[:, 0].max(), fi[:, 0].max())
+            if hi <= lo: continue
+            f = lo + frac * (hi - lo)
+            ls.append(np.interp(f, fs[:, 0], fs[:, 1])); li.append(np.interp(f, fi[:, 0], fi[:, 1]))
+        if ls:
+            print(f"    at {int(frac*100)}%: tuned-Adam {np.mean(ls):.3f}   penalty "
+                  f"{np.mean(li):.3f}   ({100*(np.mean(ls)-np.mean(li))/np.mean(ls):+.2f}%, n={len(ls)})")
+        else:
+            print(f"    at {int(frac*100)}%: no common support")
+    print("  --- forgetting at matched avg final loss ---")
+    for off in [0.02, 0.05, 0.1]:
+        gs, gi = [], []
+        for s in SEEDS:
+            fs, fi = to_xy(per[s]["schedule"]), to_xy(per[s]["interference"])
+            fs = fs[np.argsort(fs[:, 1])]; fi = fi[np.argsort(fi[:, 1])]
+            b = max(fs[:, 1].min(), fi[:, 1].min()) + off
+            if b > min(fs[:, 1].max(), fi[:, 1].max()): continue
+            gs.append(np.interp(b, fs[:, 1], fs[:, 0])); gi.append(np.interp(b, fi[:, 1], fi[:, 0]))
+        if gs:
+            print(f"    at min avg-loss+{off:.2f} (n={len(gs)}): tuned-Adam {np.mean(gs):+.3f}   "
+                  f"penalty {np.mean(gi):+.3f}")
+    print("  --- per-seed Pareto fronts (forgetting, avg loss) ---")
+    for s in SEEDS:
+        print(f"    seed {s} schedule : " + "  ".join(
+            f"({f:+.3f},{a:.3f})" for f, a in pareto(to_xy(per[s]["schedule"]))))
+        print(f"    seed {s} penalty  : " + "  ".join(
+            f"({f:+.3f},{a:.3f})" for f, a in pareto(to_xy(per[s]["interference"]))))
+        best = min(per[s]["interference"], key=lambda e: e["avg"] + max(e["forget"], 0))
+        print(f"    seed {s} best penalty config: {best['schedule']}/{best['peak_lr']:g} "
+              f"mu={best['mu']:g} -> forget {best['forget']:+.3f} avg {best['avg']:.3f}")
     log("ALL DONE -> interference_opt_results.json")
