@@ -411,7 +411,11 @@ The removability, merging, and floor results therefore extend by replacing $\Sig
 with $\bar H_A$. In practice, $\bar H_A$ can be estimated from a small number of
 evaluations of $L_A$ along the segment, without forming the Hessian explicitly. The
 same prescription tells \IGFA{} what to track under drift: the running Gauss--Newton
-subspace $\mathbb{E}[J_w J_w^\top]$ rather than a stale $\Sig_A$.
+subspace $\mathbb{E}[J_w J_w^\top]$ rather than a stale $\Sig_A$. The generalization in
+fact goes further: recast in function space, the identity, the removability dichotomy, the
+floor, and a continuous-time exact-retention guarantee all hold with A1 removed entirely,
+for arbitrary architectures (Sec.~\ref{si:beyond})---A1 buys finite-step exactness, not
+the geometry itself.
 
 \subsection{Optimal Merging and the Distortion Floor}
 \label{sec:theory:merge}
@@ -1144,8 +1148,12 @@ there the boundary concept itself blurs, and the drift experiments of
 Sec.~\ref{sec:exp:drift} show that the running estimate simply tracks the moving geometry
 without requiring a boundary at all.
 
-Several limitations bound these claims. Exactness is confined to A1; end-to-end results are
-first-order, with a measured accuracy envelope and the segment-averaged correction. The
+Several limitations bound these claims. Exactness of the parameter-space results is
+confined to A1; the function-space formulation extends the identity, the dichotomy, the
+floor, and the continuous-time retention guarantee beyond it (Sec.~\ref{si:beyond}),
+leaving finite step size and metric estimation as the remaining---quantified---gaps, and
+end-to-end \emph{parameter-space} predictions stay first-order, with a measured accuracy
+envelope and the segment-averaged correction. The
 frozen-ViT benchmarks and the merge ablation are five-seed, but the language-model
 experiments remain single runs and the seven extension studies are synthetic
 proofs-of-concept; multi-seed replication at billion-parameter scale is outstanding. Finally, the similarity gate lacks a reliable signal for language, so on text
@@ -1207,7 +1215,8 @@ results are quoted in this manuscript), \texttt{evaluate\_oq\_hardened.py} an
 end-to-end drift-and-noise probe on a gradient-trained network,
 \texttt{evaluate\_unlearning\_real.py} the real-data unlearning study,
 \texttt{evaluate\_upgrades.py} the noise-law, rate-controller, allocation, privacy, and
-damping upgrades, and \texttt{fig\_stream\_density.py} the share-density figure;
+damping upgrades, \texttt{evaluate\_beyond\_a1.py} the function-space validations of
+Sec.~\ref{si:beyond}, and \texttt{fig\_stream\_density.py} the share-density figure;
 \texttt{kaggle\_interference\_optimizer.py} (the \textsc{InterferenceSGD} benchmark against
 tuned learning-rate schedules) and \texttt{kaggle\_scale\_addons.py} (per-layer text
 similarity, real-feature $\Sig_{\rm eval}$, and the pythia-160m capacity ledger) extend
@@ -1249,8 +1258,9 @@ verifications (Sec.~\ref{si:mi}), theory details
 (Sec.~\ref{si:compare}), benchmark and scale experiments
 (Secs.~\ref{si:llm}--\ref{si:pretrain}), the algorithmic refinements referenced in the
 Discussion, extensions of the framework to federated, out-of-distribution, task-free, and
-multimodal settings (Sec.~\ref{si:extensions}), and memory-systems and control extensions
-(Sec.~\ref{si:memory}). All results are exact-regime simulations or
+multimodal settings (Sec.~\ref{si:extensions}), memory-systems and control extensions
+(Sec.~\ref{si:memory}), and the function-space formalism that extends the exact results
+beyond frozen features (Sec.~\ref{si:beyond}). All results are exact-regime simulations or
 runnable notebooks with fixed seeds.
 
 \section{Deferred proofs}
@@ -1967,6 +1977,77 @@ likelihood-ratio membership attack at chance, while at small $n$ the sensitivity
 makes certified privacy and utility incompatible
 (\texttt{evaluate\_upgrades.py})---differentially private dream replay is viable exactly
 for data-rich tasks.
+
+\section{Beyond frozen features: the function-space formalism}
+\label{si:beyond}
+Assumption A1 confines the exact \emph{parameter-space} results to frozen features, PEFT,
+and first-order NTK settings. The formalism itself does not end there: recast in function
+space, the identity, the dichotomy, the floor, and the retention guarantee all survive with
+A1 removed. Three results follow, each exact for arbitrary architectures, with validations
+on jointly trained deep networks (\texttt{evaluate\_beyond\_a1.py}).
+
+\paragraph{The interference identity is exact in function space.} For any predictor $f$
+let $L_A(f)=\tfrac12\,\mathbb{E}_{D_A}(f(x)-y)^2$, and let $f_A,f_B$ be the functions
+realized before and after learning $B$, by any architecture and any training procedure.
+Writing $\Delta\!f=f_B-f_A$ and $r_A=f_A-y$, expanding the square gives the identity
+\begin{equation}
+\Delta L_A\;=\;\mathbb{E}_{D_A}\!\big[\Delta\!f\;r_A\big]\;+\;\tfrac12\,
+\mathbb{E}_{D_A}\!\big[\Delta\!f^{\,2}\big].
+\label{eq:funcspace}
+\end{equation}
+If $A$ is realizable and trained to convergence ($r_A=0$ $D_A$-a.s.), forgetting \emph{is}
+the function-space interference energy $\tfrac12\|\Delta\!f\|^2_{L^2(D_A)}$: the metric is
+the data distribution itself, and Theorem~\ref{thm:functional} is the linear shadow of
+Eq.~\eqref{eq:funcspace} (under A1, $\Delta\!f=\Del^\top\phi$ recovers
+$\tfrac12\Del^\top\Sig_A\Del$). Numerically, Eq.~\eqref{eq:funcspace} holds to machine
+precision on jointly trained depth-$1$--$3$ networks (maximum relative error
+$2\times10^{-7}$, $r=1.000000$), including the depth-$3$ regime where the frozen-curvature
+predictor of Sec.~\ref{sec:exp:breakdown} degrades to $r\approx0.4$. Exact prediction
+beyond A1 costs two forward passes on $A$-data---no Hessian and no path integral; the
+parameter-space results contribute the structure, and A1 is the regime where the two
+pictures coincide.
+
+\paragraph{The dichotomy and the floor survive, with input support in place of feature
+support.} Learning $B$ is lossless for $A$ iff $\Delta\!f=0$ on
+$\mathrm{supp}\,D_A$. For a universal model class this is achievable whenever the input
+supports are disjoint, at any depth; and when they overlap with disagreeing targets, the
+floor is a property of the data alone: minimizing pointwise,
+\begin{equation}
+\min_f\;L_A(f)+L_B(f)\;=\;\tfrac12\!\int\!
+\frac{p_A(x)\,p_B(x)}{p_A(x)+p_B(x)}\,\big(y_A(x)-y_B(x)\big)^2\,dx,
+\label{eq:funcfloor}
+\end{equation}
+the density-overlap harmonic mean weighted by the squared target disagreement---the
+input-space form of Theorem~\ref{thm:floor}, and a lower bound for every concrete
+architecture, whose own floor equals Eq.~\eqref{eq:funcfloor} plus an approximation-class
+excess. Measured with held-out (population) losses, a depth-$3$ network trained jointly on
+conflicting sine tasks respects the bound with a $\approx20\%$ class excess (predicted
+$0.50$, measured $0.60$), and near-disjoint input supports give the lossless regime at any
+depth (predicted $0.001$, measured $0.009$).
+
+\paragraph{Exact retention without A1: instantaneous null-space control.} Along any
+absolutely continuous training path $\theta(t)$,
+$\Delta L_A=\int\langle\nabla L_A(\theta_t),\dot\theta_t\rangle\,dt$ exactly, with
+$\nabla L_A(\theta)=\mathbb{E}_{D_A}[\,r_A(x)\,\nabla_\theta f(x;\theta)\,]$. If the
+velocity stays in the kernel of the \emph{current} Gauss--Newton metric,
+$\dot\theta_t\in\ker G_A(\theta_t)$ with
+$G_A(\theta)=\mathbb{E}_{D_A}[\nabla_\theta f\,\nabla_\theta f^\top]$, then
+$\dot\theta^\top G_A\dot\theta=0$ forces
+$\langle\nabla_\theta f(x),\dot\theta\rangle=0$ for $D_A$-almost every $x$, hence
+$\langle\nabla L_A,\dot\theta\rangle\equiv0$ and \emph{$L_A$ is conserved exactly}---any
+depth, any feature drift, no A1 and no realizability. Discrete steps of size $\eta$ leak
+only the Taylor remainder $\tfrac12\eta^2 v^\top\bar H\,v$ per step
+(Theorem~\ref{thm:general}), i.e.\ $O(\eta)$ at fixed path length. Measured at fixed path
+budget on jointly trained networks, forgetting under per-step re-estimated null-space
+control falls $0.134\to0.0037\to0.0004\to0.00003$ as $\eta$ drops $0.1\to0.003$, while a
+frozen protected basis plateaus near $0.5$ (staleness bias does not vanish with $\eta$)
+and naive training forgets at $O(1)$. Assumption A1 is thereby relocated, not removed: a
+constant metric makes the kernel constant, so finite steps stay in it exactly---A1 buys
+\emph{finite-step} exactness, while the geometry, the dichotomy, the floor, and the
+continuous-time retention guarantee never needed it. The recursive Gauss--Newton tracker
+of Sec.~\ref{sec:algo} is the discretization of this exact law, with the finite-step,
+estimation, and capacity costs quantified in Secs.~\ref{sec:exp:drift},
+\ref{si:cheapgn}, and~\ref{si:memory}.
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
