@@ -65,6 +65,9 @@ def build_model(name, device):
     # parameter and buffer unconditionally (LoRA params are fp32).
     m = AutoModelForCausalLM.from_pretrained(name)
     m = m.float().to(device)
+    bad = [n for n, p in list(m.named_parameters()) + list(m.named_buffers())
+           if p.is_floating_point() and p.dtype != torch.float32]
+    assert not bad, f"non-fp32 tensors remain after .float(): {bad[:5]} (running OLD cell?)"
     for p in m.parameters(): p.requires_grad_(False)
     loras = []
     if hasattr(m, "transformer"):                       # GPT-2
