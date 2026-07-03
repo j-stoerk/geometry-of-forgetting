@@ -1101,10 +1101,9 @@ dominates. Two resolutions are developed in the Supporting Information: a probe-
 similarity estimate validated in the exact regime (Sec.~\ref{si:llm}), and---the
 theorem-backed answer---the threshold-free functional gate of Sec.~\ref{si:beyond}, which
 reads the measured interference rate instead of any modality-specific similarity signal,
-carries a continuous-time monotone-retention guarantee, and delivers the gate's first
-measured real-text gain: on a four-domain LoRA stream it is the only method that improves
-on unconditional protection on both retention and adaptation simultaneously, in every
-seed (Sec.~\ref{si:llm}). To validate the broad applicability of this framework, several extensions are detailed in
+carries a continuous-time monotone-retention guarantee, and delivers a significant,
+threshold-free real-text gain over naive continual fine-tuning on a four-domain LoRA
+stream, with parity-to-slight-edge over unconditional protection (Sec.~\ref{si:llm}). To validate the broad applicability of this framework, several extensions are detailed in
 the Supporting Information. First, we demonstrate sequential LoRA fine-tuning on language
 models at scale (Sec.~\ref{si:llm}), using recursive Gauss--Newton tracking on the adapting
 features together with a modality-appropriate similarity gate for language. Second, the
@@ -1546,21 +1545,26 @@ $L_u$ can be estimated from a micro-cache of a few thousand tokens per domain, f
 anchor construction (Sec.~\ref{si:cheapgn}), or from the dream state
 (Sec.~\ref{si:memory}). The gate is validated in the exact regime and on jointly trained
 networks (near current-Gauss--Newton retention under conflict, near-naive adaptation under
-transfer, at one extra gradient per step). On real text it delivers the gate's first
-measured gain (GPT-2, sequential LoRA on news$\to$IMDB$\to$wikitext$\to$tweets, three
-seeds; \texttt{kaggle\_functional\_gate\_llm.py}, \texttt{func\_gate\_results.json}): the
-sign gate is the only method that improves on unconditional protection on \emph{both}
-axes simultaneously---average final loss $3.976\pm0.001$ against $3.993$ (protect-all),
-$4.003$ (naive), and $3.998$ (input gate), with forgetting $+0.285\pm0.005$ against
-$+0.308$, $+0.328$, and $+0.320$---better in every seed against every baseline
-(significant against naive and the input gate, paired $p=0.03$ and $p=0.001$;
-directionally consistent against protect-all at $n=3$, $p\approx0.06$). The measured
-interference-rate map locates the gain: news$\leftrightarrow$IMDB and
-tweets$\leftrightarrow$IMDB carry positive transfer ($+0.07$, $+0.06$) that protect-all
-forfeits, while wikitext conflicts with IMDB ($-0.03$), which naive and the input gate pay
-for. The margins are modest at this scale, but the mechanism---exploit measured transfer,
-block measured conflict, no threshold and no input geometry---is exactly the one the
-theory prescribes.
+transfer, at one extra gradient per step). On real text it delivers a measured gain
+(GPT-2, sequential LoRA on news$\to$IMDB$\to$wikitext$\to$tweets, five seeds;
+\texttt{kaggle\_functional\_gate\_v2.py}, \texttt{func\_gate\_v2\_results.json}): the sign
+gate significantly improves on naive on both axes---average final loss
+$3.981\pm0.002$ against $4.001\pm0.006$ (paired $p=0.003$, five of five seeds), forgetting
+$+0.294\pm0.005$ against $+0.324$ ($p=0.0007$)---and on the input gate by a similar margin,
+while edging unconditional protection (protect-all $3.984$/$+0.300$) consistently but
+\emph{not} significantly at five seeds ($p\approx0.19$--$0.23$). Two honest negatives
+sharpen the reading. First, the earlier three-seed advantage over protect-all does not
+survive to five seeds as a significant effect; the robust claim is a significant win over
+naive and the input gate, and parity-to-slight-edge over protect-all. Second, making the
+sign test Adam-aware---projecting the \emph{preconditioned} update
+$P\odot g$ orthogonal to $\nabla L_u$ rather than the raw gradient---does not improve on the
+raw-gradient gate (final $3.983$, $p=0.40$), so Adam's preconditioning is not the
+limiting factor on the modest margins. The measured interference-rate map nonetheless
+locates the mechanism: news$\leftrightarrow$IMDB and tweets$\leftrightarrow$IMDB carry
+positive transfer ($+0.07$, $+0.06$) that protect-all forfeits, while wikitext conflicts
+with IMDB ($-0.03$), which naive and the input gate pay for. The margins are modest at
+this scale---the honest headline is a significant, threshold-free, input-geometry-free win
+over naive continual fine-tuning, with the mechanism the theory prescribes.
 
 Running the earlier probe protocol on real text (GPT-2, sequential LoRA on four AG-News
 topic domains, three seeds; \texttt{kaggle\_probe\_gate\_llm.py},
@@ -2139,9 +2143,9 @@ near-current-GN retention under conflict ($+0.14$ versus naive $+5.77$ and \emph
 projection $+5.38$, which barely helps under drift) with better adaptation than
 current-GN ($0.11$ versus $0.15$) at a fraction of its cost---one gradient of $L_A$ per
 step, from a micro-cache, the anchor construction of Sec.~\ref{si:cheapgn}, or the dream
-state of Sec.~\ref{si:memory} (\texttt{evaluate\_functional\_gate.py}). On real text it is
-the only method to improve on unconditional protection on both axes simultaneously
-(Sec.~\ref{si:llm}).
+state of Sec.~\ref{si:memory} (\texttt{evaluate\_functional\_gate.py}). On real text it
+significantly beats naive continual fine-tuning on both axes, threshold-free and without
+input geometry, and edges unconditional protection (Sec.~\ref{si:llm}).
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
