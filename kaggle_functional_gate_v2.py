@@ -44,7 +44,10 @@ RANK_PROT = 8
 CACHE_CH = 6
 USE_THREADS = False  # safer in notebooks / multi-GPU Kaggle
 LR_P1 = 3e-4
-LR_P2 = 1e-5
+LR_P2 = 1e-4     # raised from 1e-5: at 1e-5 pythia-410m barely ADAPTS or forgets
+                # (max |forgetting| ~0.003 -> vacuous), so the gate has nothing to
+                # manage.  A valid gate test needs the stream to actually forget.
+FORGET_MIN = 0.03   # pre-flight guard: warn if the naive arm forgets less than this
 ADAM_EPS = 1e-6
 MAX_GRAD_NORM = 0.5
 
@@ -63,7 +66,7 @@ def tlog(m):
         f.write(f"[{time.time()-T0:7.1f}s] {m}\n")
 
 
-SCRIPT_VERSION = "v3.0-fp32-forced"
+SCRIPT_VERSION = "v3.1-lr-and-preflight"
 
 
 class LoRA(nn.Module):
@@ -457,6 +460,14 @@ def run_part(tag, model_name, methods, seeds, doms, results):
             f"== {tag}/{method:15s}: avg final {np.mean(fm):.3f}+/-{np.std(fm):.3f}   "
             f"forgetting {np.mean(gm):.3f}+/-{np.std(gm):.3f}"
         )
+
+        # pre-flight guard: if the NAIVE baseline barely forgets, the gate
+        # comparison is vacuous -- say so loudly (and consider aborting).
+        if method == "naive" and abs(np.mean(gm)) < FORGET_MIN:
+            log(f"** WARNING [{tag}]: naive forgetting {np.mean(gm):+.3f} < {FORGET_MIN} -- "
+                f"this stream barely forgets, so the gate comparison will be VACUOUS. "
+                f"Raise the learning rate or use a more conflicting stream before "
+                f"interpreting the gate results. **")
 
         with open("func_gate_v2_results.json", "w") as f:
             json.dump(results, f, indent=1)
