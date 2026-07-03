@@ -377,6 +377,16 @@ Here, ``task support'' refers to the column space $\range\Sig_t$, that is, the
 subspace of feature directions activated by task $t$. Disjoint supports therefore mean
 orthogonal feature subspaces, not disjoint label sets.
 
+\paragraph{Relation to standard continual-learning metrics.} The functional is not a
+replacement for the familiar measures but an account of what they measure. Under squared
+loss the per-task term $\Del L_A=\tfrac12\Del^\top\Sig_A\Del$ is exactly the per-task
+summand of the Forgetting Measure and the negative of Backward Transfer; positive
+backward transfer is simply $\Del L_A<0$, which the signed gate permits and unconditional
+projection forbids. The distortion floor (Sec.~\ref{sec:theory:merge}) is then a
+\emph{lower bound} on the average Forgetting Measure achievable by any single-head
+method, set by task confusability (Sec.~\ref{si:mi}). The geometry thus explains the
+benchmark metrics and bounds them.
+
 \subsection{The architecture-general identity}
 \label{sec:theory:general}
 Theorem~\ref{thm:functional} assumes frozen features. In end-to-end training, feature
@@ -411,11 +421,52 @@ The removability, merging, and floor results therefore extend by replacing $\Sig
 with $\bar H_A$. In practice, $\bar H_A$ can be estimated from a small number of
 evaluations of $L_A$ along the segment, without forming the Hessian explicitly. The
 same prescription tells \IGFA{} what to track under drift: the running Gauss--Newton
-subspace $\mathbb{E}[J_w J_w^\top]$ rather than a stale $\Sig_A$. The generalization in
-fact goes further: recast in function space, the identity, the removability dichotomy, the
-floor, and a continuous-time exact-retention guarantee all hold with A1 removed entirely,
-for arbitrary architectures (Sec.~\ref{si:beyond})---A1 buys finite-step exactness, not
-the geometry itself.
+subspace $\mathbb{E}[J_w J_w^\top]$ rather than a stale $\Sig_A$.
+
+The generalization in fact reaches its cleanest form not in parameter space but in
+\emph{function} space, where the geometry is exact for arbitrary architectures.
+
+\begin{theorem}[Function-space interference identity]
+\label{thm:funcspace}
+Let $f_A,f_B$ be the functions realized before and after learning $B$, by any
+architecture and training procedure, and let $L_A(f)=\tfrac12\mathbb{E}_{\mathcal
+D_A}(f(x)-y)^2$. Writing $\Del\!f=f_B-f_A$ and $r_A=f_A-y$,
+\begin{equation}
+\Del L_A=\mathbb{E}_{\mathcal D_A}\!\big[\Del\!f\;r_A\big]
++\tfrac12\,\mathbb{E}_{\mathcal D_A}\!\big[\Del\!f^{\,2}\big].
+\label{eq:funcspace-main}
+\end{equation}
+If $A$ is realizable and trained to convergence ($r_A=0$), forgetting equals the
+function-space interference energy $\tfrac12\|\Del\!f\|_{L^2(\mathcal D_A)}^2$; learning
+$B$ is lossless iff $\Del\!f=0$ on $\mathrm{supp}\,\mathcal D_A$; and if the training
+velocity stays in the kernel of the current Gauss--Newton metric, $L_A$ is conserved
+exactly in continuous time.
+\end{theorem}
+\noindent Theorem~\ref{thm:functional} is the linear shadow of
+Eq.~\eqref{eq:funcspace-main}: under A1, $\Del\!f=\Del^\top\phi$ recovers
+$\tfrac12\Del^\top\Sig_A\Del$. The dichotomy, the distortion floor
+(Sec.~\ref{sec:theory:merge}), and the retention guarantee thus hold with A1 removed
+entirely, with feature support replaced by input support; A1 is the regime in which the
+geometry becomes computable in closed form and finite steps stay exact. The full
+statement, proofs, and validations on deep networks---machine-precision agreement at
+depths where the frozen-curvature predictor degrades to $r\approx0.4$---are in
+Sec.~\ref{si:beyond}, along with two routes to finite-step parameter-space exactness
+(activation-region certificates for ReLU networks and predictor--corrector retraction).
+
+\begin{proposition}[Estimation-error budget]
+\label{prop:esterror}
+Protection with an \emph{estimated} basis $\hat U$ whose largest principal angle to
+$\range\Sig_A$ is $\epsilon$ is not exactly lossless: under gradient noise of variance
+$\sigma^2$ and step size $\eta$ over $t$ steps, the induced forgetting obeys the
+diffusion law $\mathbb{E}[\Del L_A]=\tfrac12\eta^2\sigma^2 t\,r\sin^2\epsilon+o(\sin^2\epsilon)$,
+vanishing as $\epsilon\to0$.
+\end{proposition}
+\noindent The method is therefore a \emph{controlled} approximation of the exact
+identity, not a heuristic: retention loss is governed by a single measurable
+quantity---the basis error $\epsilon$---which the recursive tracker drives down and the
+drift velocity monitors (validated in \texttt{evaluate\_upgrades.py}; the law inverts to
+a retention-aware step-size bound, Sec.~\ref{si:memory}). This isolates the two residual
+gaps for end-to-end deployment as basis error and finite step size, both quantified.
 
 \subsection{Optimal Merging and the Distortion Floor}
 \label{sec:theory:merge}
@@ -670,6 +721,23 @@ $+$ PEFT}, modulating only adapter, LoRA, or head parameters, where Assumption A
 hence the functional are exact; and (iii) \emph{overlay-native} operation, embedding
 subspace tracking inside a read-write decomposition over a frozen transformer, which is
 the natural regime for replay-free continual pretraining.
+
+\paragraph{When to use \IGFA{} rather than projection, replay, or a Fisher penalty.} The
+choice is itself a measurable pre-flight decision, from pairwise subspace overlap and
+target agreement (Sec.~\ref{si:feasibility}). \emph{Disjoint supports} $\Rightarrow$
+structural allocation is lossless, so \IGFA{} reduces to \OGD{} and neither replay nor a
+Fisher penalty is needed. \emph{Overlapping supports, aligned targets} $\Rightarrow$
+share, which the signed gate grants and unconditional projection forfeits.
+\emph{Overlapping supports, conflicting targets} $\Rightarrow$ an irreducible floor, and
+the only decision is where its cost lands: forgetting (naive), deferred fit (projection),
+or stored data (replay). \emph{Cumulative rank near capacity} $\Rightarrow$ add capacity,
+replay, or graceful overwriting. The gate's marginal value over projection is organized by
+the stream's share density and is significant precisely where overlaps straddle the
+threshold (Sec.~\ref{sec:exp:cifar}). Two operating assumptions bound this framing and are
+made explicit here rather than deferred: task boundaries are treated as known (relaxed by
+the recursive tracker and the velocity detector of Sec.~\ref{si:extensions}), and for
+language the retention mechanism transfers but the transfer-recovering similarity signal
+is the threshold-free functional gate of Sec.~\ref{si:beyond} rather than input geometry.
 
 % =====================================================================
 \section{Experiments}
@@ -1044,6 +1112,24 @@ sense, the functional plays the same conceptual role here that the NTK \cite{jac
 played for generalization: it provides a geometry and a set of computable quantities in
 place of heuristics.
 
+\paragraph{A map of the claims.} The results span four evidential tiers, and we label them
+so the strongest are not read as the broadest. \emph{(I) Exact.} In frozen-feature/PEFT
+settings (A1) and, architecture-free, in function space
+(Theorem~\ref{thm:funcspace}): the interference identity, the removability dichotomy, the
+$\Sig$-orthogonal optimal merge, the distortion floor, and continuous-time exact
+retention. \emph{(II) Exact-with-quantified-residual.} End-to-end parameter-space
+retention, exact up to the basis error of Proposition~\ref{prop:esterror} and the
+finite-step remainder of Theorem~\ref{thm:general}, both measured. \emph{(III)
+Empirically supported.} The multi-seed benchmark results---Split-Digits, Rotated-Digits,
+the frozen-ViT streams, and the threshold-free gate's real-text gain over naive
+fine-tuning---which are measured, not proved. \emph{(IV) Mechanism probes and
+conjectures.} The generality extensions (federated merging, out-of-distribution and
+task-free signals, physics-informed constraints, Fisher-metric policy gradients,
+meta-learning, memory-and-control instances), each an exact-regime proof-of-concept
+labelled in the Supporting Information as \emph{proved-in-A1}, \emph{empirical mechanism
+probe}, or \emph{forward-looking conjecture}, so that scope of ambition never inflates
+scope of proof.
+
 The central assumption is A1. For frozen backbones and PEFT, the regime most
 practical deployments now occupy, it is exact and the results stand without
 approximation, as the real-data identity at $r=0.999$ confirms. For full networks it is
@@ -1160,10 +1246,29 @@ leaving finite step size and metric estimation as the remaining---quantified---g
 end-to-end \emph{parameter-space} predictions stay first-order, with a measured accuracy
 envelope and the segment-averaged correction. The
 frozen-ViT benchmarks and the merge ablation are five-seed, but the language-model
-experiments remain single runs and the seven extension studies are synthetic
-proofs-of-concept; multi-seed replication at billion-parameter scale is outstanding. Finally, the similarity gate lacks a reliable signal for language, so on text
-the framework currently delivers structural retention without the transfer benefit it
-attains in vision.
+experiments remain single-to-few runs and the extension studies are synthetic
+proofs-of-concept; multi-seed replication at billion-parameter scale is outstanding. The
+similarity gate reads input geometry only in its threshold form; the threshold-free
+functional gate resolves the language case in principle (Sec.~\ref{si:beyond}) but its
+margins at scale are modest.
+
+\begin{center}\small
+\fbox{\begin{minipage}{0.95\columnwidth}
+\textbf{What breaks the exact identities, and how.} \emph{Label noise / imperfect task
+optima:} a non-zero residual $r_A\neq0$ adds the cross term $\mathbb{E}[\Del\!f\,r_A]$ of
+Eq.~\eqref{eq:funcspace-main}; forgetting is then predicted by the \emph{full} identity,
+not the energy alone, and mis-specification enters as a task-constant under A2 (the
+$\Sig$-metric ranking is preserved). \emph{Early stopping / finite steps:} the update is
+not the exact minimizer, leaving the $O(\eta)$ remainder of Theorem~\ref{thm:general} and
+the diffusion term of Proposition~\ref{prop:esterror}---both measured, both shrinking with
+step size and basis accuracy. \emph{Class imbalance / shifted input density:} $\Sig_A$ is
+re-weighted by the deployment density, so the protected geometry must be estimated on the
+distribution that matters, not the training mixture; a stale or mis-weighted $\Sig_A$
+shows up as basis error $\epsilon$ and is caught by the drift-velocity monitor. In each
+case the failure is a \emph{named, measurable} quantity in the identities, not an
+unmodelled gap.
+\end{minipage}}
+\end{center}
 
 % =====================================================================
 \section{Conclusion}
@@ -1840,6 +1945,18 @@ task-free, and multimodal results average over $20$ seeds;
 \texttt{evaluate\_hypotheses.py}, \texttt{evaluate\_applications.py},
 \texttt{evaluate\_open\_questions\_new.py}). These are
 directional demonstrations of scope, not benchmarks.
+
+To keep ambition separate from proof (Tier IV of the claim map,
+Sec.~\ref{sec:discussion}), each extension carries one of three labels.
+\textbf{[proved-A1]}: an exact consequence of the identity in the frozen-feature regime,
+holding wherever A1 holds---federated $\Sig$-merging, the out-of-distribution
+projection-ratio signal, physics-informed constraints, Fisher-metric policy gradients,
+and floor-minimizing meta-learning. \textbf{[mechanism-probe]}: an empirical demonstration
+that the predicted mechanism operates, without a proof of optimality---task-free boundary
+detection, the memory-and-control instances (trust region, consolidation, floor-scheduled
+and dream replay), and the real-backbone results. \textbf{[conjecture]}: a construction
+whose full form needs work the paper does not complete---cross-modal $\Sig_{vl}$ gating
+and the biological floor-scheduling prediction. The label prefixes each result below.
 
 \paragraph{Federated learning is $\Sig$-merging.} Non-IID clients are tasks with different
 input geometries, and the weight divergence that FedAvg suffers coincides with the merge
