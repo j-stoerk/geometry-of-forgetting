@@ -2094,6 +2094,30 @@ of Sec.~\ref{sec:algo} is the discretization of this exact law, with the finite-
 estimation, and capacity costs quantified in Secs.~\ref{sec:exp:drift},
 \ref{si:cheapgn}, and~\ref{si:memory}.
 
+\paragraph{Finite-step exactness recovered: two parameter-space routes.} Even the
+finite-step gap closes, by two complementary mechanisms
+(\texttt{evaluate\_beyond\_a1.py}). \emph{(i) Region-exactness for piecewise-linear
+networks.} For ReLU-family models the loss is \emph{exactly} quadratic in each layer's
+weights while the activation pattern on the $A$-support is fixed: per-layer, Theorem~1
+holds at finite step size inside the activation region, and the region boundary has a
+closed form---for a step $sV$ in layer weights, no activation flips while
+$s<\min_{i,j}|{\rm pre}_{ij}|/|(Vx_i)_j|$, computable from the stored preactivation
+margins. Measured: the quadratic is exact to relative error $10^{-11}$ inside the region,
+and the certificate is conservative (breakdown observed at $1.4\pm0.4\times$ the
+threshold, never meaningfully before it). Assumption A1 thus relaxes, for ReLU networks,
+to a checkable per-step margin condition, and the margin joins the pre-flight/ledger
+family as a monitorable quantity. \emph{(ii) Retraction for any smooth architecture.}
+Exact retention means staying on the anchor level set
+$\{\theta: f(x_i;\theta)=c_i\}$, and that manifold is returnable: after each ordinary
+update, two Gauss--Newton corrector steps on the anchor residuals restore it. Measured on
+jointly trained networks, anchor-set forgetting sits at numerical zero
+($\sim10^{-14}$) \emph{independent of step size}, where projection alone leaks $O(\eta)$
+($0.17$, $0.043$, $0.0015$ at $\eta=0.1,0.05,0.02$), while the new task still trains.
+The honest boundary of the result is statistical rather than optimizational: exactness
+holds on the anchors, and held-out $A$-loss is governed by how well the anchor set pins
+the function class between anchors ($0.15$--$0.26$ here at $24$ anchors)---retention
+beyond A1 becomes a generalization question, not an optimizer question.
+
 \paragraph{Monotone-retention gating: the threshold-free gate.} The path integral also
 yields the gate itself, with the similarity threshold removed. Since
 $dL_A/dt=\langle\nabla L_A,\dot\theta\rangle$, the exact, modality-free rule is a

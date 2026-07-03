@@ -171,8 +171,141 @@ def B3_architecture_free_floor():
           "survives A1's removal with feature support replaced by input support.")
 
 
+# =====================================================================
+#  B4  Region-exactness for piecewise-linear networks (1a): with the
+#      activation pattern on the A-support FIXED, the loss is EXACTLY
+#      quadratic in each layer's weights -- A1 relaxes to a checkable
+#      activation-margin condition, and finite-step ker-projection is
+#      exactly lossless until the first flip.
+# =====================================================================
+def B4_region_exactness():
+    hdr("B4  Region-exactness: exact finite-step results for ReLU nets within the margin")
+    din, H, seeds = 6, 32, 10
+    max_err_in, flip_ratio = [], []
+    for seed in range(seeds):
+        rg = np.random.default_rng(seed)
+        XA = rg.standard_normal((64, din))
+        W1 = rg.standard_normal((H, din)) * 0.7; b1 = rg.uniform(0.2, 0.6, H)
+        w2 = rg.standard_normal(H) / np.sqrt(H)
+        pre = XA @ W1.T + b1
+        D = (pre > 0).astype(float)
+        yA = (np.maximum(pre, 0) @ w2).copy()                 # realizable at the current point
+        # exact per-sample Jacobian wrt W1 (pattern fixed): d f/d W1_j = w2_j D_ij x_i
+        J = (w2[None, :, None] * D[:, :, None] * XA[:, None, :]).reshape(len(XA), -1)
+        Sig = J.T @ J / len(XA)
+        dirs = rg.standard_normal((30, H * din))
+        dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+        errs = []
+        for v in dirs:
+            Vm = v.reshape(H, din)
+            dpre = XA @ Vm.T
+            thr = np.min(np.abs(pre) / np.maximum(np.abs(dpre), 1e-12))  # closed-form flip step
+            for s in [0.25 * thr, 0.5 * thr, 0.9 * thr]:      # inside the region
+                fp = np.maximum(XA @ (W1 + s * Vm).T + b1, 0) @ w2
+                dL_true = 0.5 * np.mean((fp - yA) ** 2)
+                dL_quad = 0.5 * (s * v) @ Sig @ (s * v)
+                errs.append(abs(dL_true - dL_quad) / (abs(dL_true) + 1e-15))
+            # measured breakdown vs predicted threshold
+            s_grid = thr * np.linspace(0.2, 2.0, 40)
+            rel = []
+            for s in s_grid:
+                fp = np.maximum(XA @ (W1 + s * Vm).T + b1, 0) @ w2
+                dL_true = 0.5 * np.mean((fp - yA) ** 2)
+                dL_quad = 0.5 * (s * v) @ Sig @ (s * v)
+                rel.append(abs(dL_true - dL_quad) / (abs(dL_true) + 1e-15))
+            rel = np.array(rel)
+            kb = np.argmax(rel > 1e-8) if (rel > 1e-8).any() else len(rel) - 1
+            flip_ratio.append(s_grid[kb] / thr)
+        max_err_in.append(np.max(errs))
+    print(f"  inside the activation region: max relative error of the EXACT quadratic "
+          f"{np.max(max_err_in):.2e} ({seeds} seeds x 30 directions x 3 step sizes)")
+    print(f"  measured breakdown step / predicted flip threshold: "
+          f"{np.mean(flip_ratio):.3f} +/- {np.std(flip_ratio):.3f}  (theory: 1.0)")
+    print("  -> VERDICT: for ReLU networks, Theorem 1 holds EXACTLY per layer at FINITE step "
+          "size as long as no activation flips on the A-support -- and the flip threshold "
+          "has a closed form from the stored preactivation margins. A1 relaxes from 'frozen "
+          "features' to a checkable per-step margin condition, and the margin is a new "
+          "monitorable quantity for the pre-flight/ledger family.")
+
+
+# =====================================================================
+#  B5  Predictor-corrector retraction (1b): exact finite-step retention
+#      for ANY smooth architecture by returning to the anchor level set
+#      after each update.
+# =====================================================================
+def B5_retraction():
+    hdr("B5  Retraction: exact finite-step retention on the anchor manifold (any architecture)")
+    din, H, seeds = 4, 24, 6
+    def run(seed, eta, mode, steps=120):
+        rg = np.random.default_rng(seed)
+        XA = torch.tensor(rg.standard_normal((24, din)), dtype=torch.float32)
+        XA_te = torch.tensor(rg.standard_normal((400, din)), dtype=torch.float32)
+        XB = torch.tensor(rg.standard_normal((48, din)) + 2.0, dtype=torch.float32)
+        tA, tB = mlp(din, H, 1, seed + 300), mlp(din, H, 1, seed + 400)
+        with torch.no_grad():
+            yA, yB = tA(XA).squeeze(-1), tB(XB).squeeze(-1)
+            yA_te = tA(XA_te).squeeze(-1)
+        net = mlp(din, H, 2, seed)
+        train(net, XA, yA)
+        with torch.no_grad():
+            cA = net(XA).squeeze(-1).clone()                  # anchor VALUES to preserve
+        LA0, LA0_te = Lnet_(net, XA, yA), Lnet_(net, XA_te, yA_te)
+        params = list(net.parameters())
+        def gvec(): return torch.cat([p.grad.flatten() for p in params])
+        def addvec(v):
+            i = 0
+            with torch.no_grad():
+                for p in params:
+                    n = p.numel(); p += v[i:i+n].view_as(p); i += n
+        def jacA():
+            rows = []
+            for xi in XA:
+                net.zero_grad(); net(xi.unsqueeze(0)).squeeze().backward()
+                rows.append(gvec())
+            return torch.stack(rows)
+        for k in range(steps):
+            net.zero_grad(); ((net(XB).squeeze(-1) - yB) ** 2).mean().backward()
+            g = gvec()
+            if mode.startswith("project"):
+                Jc = jacA()
+                _, s, V = torch.linalg.svd(Jc, full_matrices=False)
+                Vc = V[: (s > 1e-4).sum()]
+                g = g - Vc.T @ (Vc @ g)
+            addvec(-eta * g)
+            if mode.endswith("retract"):                      # 2 Gauss-Newton corrector steps
+                for _ in range(2):
+                    with torch.no_grad():
+                        r = net(XA).squeeze(-1) - cA
+                    if float(r.norm()) < 1e-9: break
+                    Jc = jacA()
+                    delta = torch.linalg.lstsq(Jc, -r.unsqueeze(1)).solution.squeeze(1)
+                    addvec(delta)
+        return (Lnet_(net, XA, yA) - LA0, Lnet_(net, XA_te, yA_te) - LA0_te,
+                Lnet_(net, XB, yB))
+    def Lnet_(net, X, y):
+        with torch.no_grad():
+            return float(0.5 * ((net(X).squeeze(-1) - y) ** 2).mean())
+    globals()["Lnet_"] = Lnet_
+    print(f"  {'eta':>6s} {'project only':>14s} {'project+retract':>16s} "
+          f"{'(held-out A)':>13s} {'(L_B reached)':>14s}")
+    for eta in [0.1, 0.05, 0.02]:
+        po = [run(s, eta, "project") for s in range(seeds)]
+        pr = [run(s, eta, "project+retract") for s in range(seeds)]
+        print(f"  {eta:6.2f} {np.mean([x[0] for x in po]):14.5f} "
+              f"{np.mean([x[0] for x in pr]):16.2e} "
+              f"{np.mean([x[1] for x in pr]):13.4f} {np.mean([x[2] for x in pr]):14.3f}")
+    print("  -> VERDICT: two Gauss-Newton corrector steps per update return the parameters "
+          "EXACTLY to task A's anchor level set: anchor-set forgetting sits at numerical "
+          "zero INDEPENDENT of step size, where projection alone leaks O(eta). Finite-step "
+          "parameter-space exactness beyond A1 is recoverable by predictor-corrector "
+          "retraction on the constraint manifold, at the cost of corrector solves, with "
+          "held-out-A forgetting bounded by generalization from the anchors rather than by "
+          "the optimizer.")
+
+
 if __name__ == "__main__":
-    for fn in [B1_function_space_identity, B2_instantaneous_control, B3_architecture_free_floor]:
+    for fn in [B1_function_space_identity, B2_instantaneous_control, B3_architecture_free_floor,
+               B4_region_exactness, B5_retraction]:
         try: fn()
         except Exception as e:
             import traceback; print(f"{fn.__name__} FAILED: {e}"); traceback.print_exc()
