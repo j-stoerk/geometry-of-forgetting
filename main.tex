@@ -2306,6 +2306,35 @@ state of Sec.~\ref{si:memory} (\texttt{evaluate\_functional\_gate.py}). On real 
 significantly beats naive continual fine-tuning on both axes, threshold-free and without
 input geometry, and edges unconditional protection (Sec.~\ref{si:llm}).
 
+The gate is, moreover, not merely a safe modification of the update but the
+\emph{optimal} one.
+
+\begin{corollary}[The sign gate is optimal monotone control]
+\label{cor:qpgate}
+Let $u$ be the desired update and let tasks $1,\dots,m$ be protected. The problem
+\begin{equation}
+v^\ast=\operatorname{argmin}_v \tfrac12\|v-u\|^2
+\quad\text{s.t.}\quad \langle\nabla L_{A_i},v\rangle\le 0,\;\; i=1,\dots,m,
+\label{eq:qpgate}
+\end{equation}
+has the solution $v^\ast=u-G\lambda^\ast$ with $G=[\nabla L_{A_1}\cdots\nabla L_{A_m}]$
+and $\lambda^\ast=\operatorname{argmin}_{\lambda\ge0}\|G\lambda-u\|$ (a nonnegative
+least-squares problem). For $m=1$, $v^\ast$ is exactly the sign gate; when no constraint
+is violated, $v^\ast=u$ (sharing); when all are violated, $v^\ast$ remains feasible yet
+strictly less restrictive than equality projection: protected rates may be negative---the
+update is allowed to \emph{improve} protected tasks, which projection forbids---and
+$\|v^\ast-u\|\le\|v_{\mathrm{proj}}-u\|$ always.
+\end{corollary}
+\noindent\emph{Intuition:} stationarity of the Lagrangian gives $v=u-G\lambda$;
+substituting back turns the dual into the stated nonnegative least squares, whose
+Karush--Kuhn--Tucker conditions are precisely primal feasibility and complementary
+slackness. The gate therefore interpolates between naive sharing and subspace projection
+through the active set, and unconditional projection is the special case in which the
+inequality constraints are hardened to equalities---never better in the exact regime. All
+statements are machine-checked ($\|v^\ast-v_{\mathrm{gate}}\|=0$ at $m=1$; feasibility to
+$10^{-15}$; measured protected-rate decrease under full activation;
+\texttt{evaluate\_functional\_control.py}).
+
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
 fine-tuning a norm-preserving recurrence on an overlapping second task, naive rollout error
