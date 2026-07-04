@@ -1255,9 +1255,11 @@ floor, and the continuous-time retention guarantee beyond it (Sec.~\ref{si:beyon
 leaving finite step size and metric estimation as the remaining---quantified---gaps, and
 end-to-end \emph{parameter-space} predictions stay first-order, with a measured accuracy
 envelope and the segment-averaged correction. The
-frozen-ViT benchmarks and the merge ablation are five-seed, but the language-model
-experiments remain single-to-few runs and the extension studies are synthetic
-proofs-of-concept; multi-seed replication at billion-parameter scale is outstanding. The
+frozen-ViT benchmarks and the merge ablation are five-seed, and the functional-gate
+language result is now multi-seed at two scales (GPT-2, five seeds;
+\texttt{pythia-410m}, three seeds), but the remaining language-model experiments are
+single runs and the extension studies are synthetic proofs-of-concept; multi-seed
+replication at billion-parameter scale is outstanding. The
 similarity gate reads input geometry only in its threshold form; the threshold-free
 functional gate resolves the language case in principle (Sec.~\ref{si:beyond}) but its
 margins at scale are modest.
@@ -1680,6 +1682,20 @@ positive transfer ($+0.07$, $+0.06$) that protect-all forfeits, while wikitext c
 with IMDB ($-0.03$), which naive and the input gate pay for. The margins are modest at
 this scale---the honest headline is a significant, threshold-free, input-geometry-free win
 over naive continual fine-tuning, with the mechanism the theory prescribes.
+
+The result replicates at four times the scale on a second architecture. On
+\texttt{pythia-410m} (gpt-neox, sequential LoRA on the same four-domain stream, three
+seeds; \texttt{func\_gate\_v2\_results\_pythia410m\_lr1e-4.json}), the Adam-aware sign
+gate again improves on naive on both axes---final loss $3.605\pm0.002$ against
+$3.624\pm0.001$ (paired $p=0.012$) and forgetting $+0.297\pm0.005$ against
+$+0.321\pm0.003$ ($p=0.038$), in three of three seeds on both metrics---and is ahead of
+unconditional protection ($3.616$/$+0.316$) in all three seeds on both axes, though not
+significantly at $n=3$ ($p\approx0.12$--$0.20$), mirroring the GPT-2 pattern. One
+methodological finding from the same runs is worth recording: at a learning rate of
+$10^{-5}$ the identical stream produced near-zero forgetting ($0.003$) and all methods
+tied within $0.01$---a vacuous comparison. The gate has value only where interference
+exists, which is precisely the pre-flight feasibility point: measure whether the stream
+forgets before deploying---or crediting---any mitigation.
 
 Running the earlier probe protocol on real text (GPT-2, sequential LoRA on four AG-News
 topic domains, three seeds; \texttt{kaggle\_probe\_gate\_llm.py},
