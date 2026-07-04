@@ -66,7 +66,7 @@ def tlog(m):
         f.write(f"[{time.time()-T0:7.1f}s] {m}\n")
 
 
-SCRIPT_VERSION = "v3.1-lr-and-preflight"
+SCRIPT_VERSION = "v3.2-active-set"
 
 
 class LoRA(nn.Module):
@@ -316,7 +316,7 @@ def run_stream(seed, method, device, doms, model_name):
     for t, (tr, te, cache) in enumerate(doms):
         if len(tr) < BS:
             raise ValueError(f"Training split for domain {t} is too small: len(tr)={len(tr)}, BS={BS}")
-        if method in ("func-sign", "func-sign-adam") and t > 0 and len(cache) == 0:
+        if method in ("func-sign", "func-sign-adam", "func-active") and t > 0 and len(cache) == 0:
             raise ValueError(f"Cache split for domain {t} is empty, func-sign methods need past cache chunks")
 
         Qs = None
@@ -371,6 +371,30 @@ def run_stream(seed, method, device, doms, model_name):
                     if den > 1e-12 and dot < 0:
                         g = g - dot / den * nA
 
+                setgrad(g)
+
+            elif method == "func-active" and t > 0:
+                # ACTIVE-SET gate (QP corollary): constrain against ALL past
+                # domains, not one sampled probe.  v = u - G nnls(G, u) with
+                # u = -g  =>  g_new = g + G nnls(G, -g).  Cost: t extra
+                # micro-cache backwards per step.
+                g = gvec()
+                cols = []
+                for u in range(t):
+                    cu = doms[u][2]
+                    j = random.randint(0, max(len(cu) - 2, 0))
+                    opt.zero_grad(set_to_none=True)
+                    lm_loss(model, cu[j:j + 2], device).backward()
+                    nA = gvec()
+                    if float(nA.norm() ** 2) > 1e-12:
+                        cols.append(nA)
+                if cols:
+                    from scipy.optimize import nnls as _nnls
+                    Gm = torch.stack(cols, 1).cpu().double().numpy()
+                    lam, _ = _nnls(Gm, (-g).cpu().double().numpy())
+                    if lam.any():
+                        g = g + torch.as_tensor(Gm @ lam, dtype=g.dtype,
+                                                device=g.device)
                 setgrad(g)
 
             total_norm = torch.nn.utils.clip_grad_norm_(params, max_norm=MAX_GRAD_NORM)
@@ -480,6 +504,9 @@ def paired_tests(results, seeds, tag):
         ("func-sign-adam", "protect-all"),
         ("func-sign-adam", "naive"),
         ("func-sign", "protect-all"),
+        ("func-active", "func-sign-adam"),
+        ("func-active", "protect-all"),
+        ("func-active", "naive"),
     ]
     for a, b in pairs:
         ka = f"{tag}/{a}"
@@ -532,7 +559,7 @@ if __name__ == "__main__":
         run_part(
             "P2-" + MODEL_P2.split("/")[-1],
             MODEL_P2,
-            ["naive", "protect-all", "func-sign-adam"],
+            ["naive", "protect-all", "func-sign-adam", "func-active"],
             SEEDS_P2,
             doms2,
             results,

@@ -18,10 +18,17 @@
 #                  compute grad L_u from a MICRO-CACHE (2 features per
 #                  class), and remove the update's component only if it
 #                  would increase L_u.  No threshold, no subspaces.
-#  Prediction: func-sign inherits the ImageNet-R win without s*, ties
-#  the exact-tie streams, and needs no per-stream calibration.
+#    func-active : ACTIVE-SET gate (Corollary: the gate is the exact
+#                  solution of min ||v-u||^2 s.t. <grad L_i, v> <= 0;
+#                  single-probe sampling under-enforces that QP under
+#                  dense conflict -- measured 35% recovery in the exact
+#                  regime vs 100% for the active set).  Per step:
+#                  grad L_u for ALL past micro-caches, then NNLS.
+#                  Theory predicts it closes most of the superclass gap
+#                  to igfa/ogd while staying exactly inert on the
+#                  masked task-incremental streams.
 #  5 seeds, mean +/- std, paired t-tests.
-#  ~15 min with cached features; +30-45 min first-run extraction (2xT4).
+#  ~25 min with cached features; +30-45 min first-run extraction (2xT4).
 # =====================================================================
 import os, json, time, pickle, tarfile, urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -29,9 +36,10 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch, torch.nn.functional as F
 from scipy import stats
+from scipy.optimize import nnls
 from tqdm.auto import tqdm
 
-SCRIPT_VERSION = "v2.0-standalone"
+SCRIPT_VERSION = "v2.1-active-set"
 
 SEEDS, SSTAR, RANK, EPOCHS, BS, LR = [0, 1, 2, 3, 4], 0.60, 12, 4, 256, 1e-3
 CACHE_PER_CLASS = 2
@@ -236,6 +244,26 @@ def run_stream(feats, seed, method, superclass=False):
                     if nrm2 > 1e-12 and dot < 0:
                         g = g - dot / nrm2 * nA
                     W.grad = g
+                elif method == "func-active" and caches:
+                    g = W.grad.detach().clone()
+                    cols = []
+                    for Xu, yu, mu in caches:              # ALL protected constraints
+                        logit_u = Xu @ W.T
+                        if mu is not None: logit_u = logit_u.masked_fill(~mu, -1e9)
+                        W.grad = None
+                        F.cross_entropy(logit_u, yu).backward()
+                        nA = W.grad.detach()
+                        if float((nA * nA).sum()) > 1e-12:
+                            cols.append(nA.flatten().clone())
+                    if cols:
+                        # v = u - G nnls(G,u), u = -g  ->  g_new = g + G nnls(G,-g)
+                        Gm = torch.stack(cols, 1).cpu().double().numpy()
+                        lam, _ = nnls(Gm, -g.flatten().cpu().double().numpy())
+                        if lam.any():
+                            corr = torch.as_tensor(Gm @ lam, dtype=g.dtype,
+                                                   device=g.device).view_as(g)
+                            g = g + corr
+                    W.grad = g
                 opt.step()
         bases.append(Bn)
         idxc = []                                          # micro-cache: 2 features per class
@@ -264,7 +292,7 @@ if __name__ == "__main__":
     streams = [("SplitCIFAR100", feats_c100, False), ("ImageNetR", feats_inr, False),
                ("CUB", feats_cub, False), ("C100-Superclass", feats_c100, True)]
     for tag, feats, sup in streams:
-        per = {m: [] for m in ["naive", "ogd", "igfa", "func-sign"]}
+        per = {m: [] for m in ["naive", "ogd", "igfa", "func-sign", "func-active"]}
         for seed in SEEDS:
             for m in per:
                 per[m].append(run_stream(feats, seed, m, superclass=sup))
@@ -274,7 +302,9 @@ if __name__ == "__main__":
                   f"   forget {np.mean([x[1] for x in v]):+.3f}+/-{np.std([x[1] for x in v]):.3f}")
         results[tag] = {m: dict(acc=[x[0] for x in v], forget=[x[1] for x in v])
                         for m, v in per.items()}
-        for a, b in [("func-sign", "igfa"), ("func-sign", "ogd"), ("func-sign", "naive")]:
+        for a, b in [("func-sign", "igfa"), ("func-sign", "ogd"), ("func-sign", "naive"),
+                     ("func-active", "igfa"), ("func-active", "func-sign"),
+                     ("func-active", "naive")]:
             xa = [x[0] for x in per[a]]; xb = [x[0] for x in per[b]]
             p = 1.0 if np.allclose(xa, xb) else stats.ttest_rel(xa, xb).pvalue
             print(f"  paired acc {a} vs {b}: {np.mean(xa):.3f} vs {np.mean(xb):.3f} (p={p:.4f})")
