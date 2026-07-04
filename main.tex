@@ -1697,6 +1697,22 @@ tied within $0.01$---a vacuous comparison. The gate has value only where interfe
 exists, which is precisely the pre-flight feasibility point: measure whether the stream
 forgets before deploying---or crediting---any mitigation.
 
+A vision test of the same gate scopes it honestly (five seeds per stream;
+\texttt{kaggle\_sign\_gate\_vit.py}, \texttt{sign\_gate\_vit\_results.json}). On the
+masked task-incremental ViT streams (Split-CIFAR-100, ImageNet-R, CUB) the gate is
+\emph{exactly} inert: with class masks, the current and stored tasks' gradients occupy
+disjoint rows of the head, the inner product is identically zero, and the gated run is
+bitwise equal to naive---correctly detecting that head interference is structurally
+absent, where the subspace gates pay $1.2$--$2.3$ accuracy points for protection nothing
+needed. On the dense-conflict superclass stream the gate fires and improves on naive on
+both axes ($p\le0.002$) but recovers only ${\sim}18\%$ of subspace protection's gain
+(accuracy $0.750$ versus \IGFA{}'s $0.786$): a single sampled constraint per step
+under-protects when every task conflicts with every other. The gate therefore
+complements rather than replaces the threshold gate---sparse or moderate conflict
+without an input-geometry signal is its regime (language), dense conflict belongs to
+subspace projection, and the stream's shared density selects the tool in advance, which
+is the deployment rule of the Method section.
+
 Running the earlier probe protocol on real text (GPT-2, sequential LoRA on four AG-News
 topic domains, three seeds; \texttt{kaggle\_probe\_gate\_llm.py},
 \texttt{probe\_gate\_results.json}) yields three findings. First, the probe signal transfers: the probe cosines form a stable,
