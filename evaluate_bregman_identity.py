@@ -114,3 +114,46 @@ if __name__ == "__main__":
     print("     (L_B higher) -- the QP trade under conflict, exactly as in the")
     print("     squared-loss case.  Identity, dichotomy, floor, gate, and QP corollary")
     print("     all transfer to the loss family the LLM experiments actually use.")
+
+    hdr("B6: the finite-step leakage law under CE (Fisher metric replaces identity)")
+    # kernel-direction step theta + eta*v on a deep net with softmax head:
+    #   dL_A = (eta^2/2) E[(mu_A-y)' kappa] + (eta^4/8) E[kappa' H_phi kappa] + ...
+    # with kappa(x) = v'D2f(x)v (per-logit) and H_phi = diag(p)-pp'.
+    din, h2, Kc = 3, 8, 3
+    def net(th, X):
+        i = 0
+        W1 = th[i:i+din*h2].reshape(din, h2); i += din*h2
+        b1 = th[i:i+h2]; i += h2
+        W2 = th[i:i+h2*Kc].reshape(h2, Kc); i += h2*Kc
+        return np.tanh(X @ W1 + b1) @ W2 + th[i:i+Kc]
+    dpar = din*h2 + h2 + h2*Kc + Kc
+    nS = 12                                                 # nS*Kc rows < dpar -> kernel
+    for realizable in [False, True]:
+        rg2 = np.random.default_rng(3)
+        th = rg2.standard_normal(dpar) * 0.8
+        Xs = rg2.standard_normal((nS, din))
+        F0 = net(th, Xs); P0 = softmax(F0)
+        Yl = P0 if realizable else softmax(rg2.standard_normal((nS, Kc)))
+        eps = 1e-6                                          # full function Jacobian
+        J = np.empty((nS * Kc, dpar))
+        for j in range(dpar):
+            tp, tm = th.copy(), th.copy(); tp[j] += eps; tm[j] -= eps
+            J[:, j] = ((net(tp, Xs) - net(tm, Xs)) / (2 * eps)).ravel()
+        v = np.linalg.svd(J, full_matrices=True)[2][np.linalg.matrix_rank(J):][0]
+        v /= np.linalg.norm(v)
+        hh = 1e-4
+        kap = (net(th + hh*v, Xs) - 2*F0 + net(th - hh*v, Xs)) / hh**2   # (nS,Kc)
+        c2 = 0.5 * np.mean(((P0 - Yl) * kap).sum(1))
+        Hk = P0 * kap - P0 * (P0 * kap).sum(1, keepdims=True)            # H_phi kappa
+        c4 = 0.125 * np.mean((kap * Hk).sum(1))
+        L = lambda t: ce_loss(net(t, Xs), Yl)
+        etas = np.geomspace(0.02, 0.2, 8)
+        dL = np.array([L(th + e*v) - L(th) for e in etas])
+        slope = np.polyfit(np.log(etas), np.log(np.abs(dL) + 1e-300), 1)[0]
+        ratio = dL[0]/etas[0]**4/c4 if realizable else dL[0]/etas[0]**2/c2
+        lab = "converged (r=0)" if realizable else "non-converged  "
+        print(f"  {lab}: slope {slope:5.2f} (theory {'4' if realizable else '2'});"
+              f"  coeff ratio = {ratio:.3f} (theory 1)")
+    print("  -> the leakage law transfers verbatim with H_phi (the Fisher metric of")
+    print("     the head) replacing the identity: quadratic residual-weighted term,")
+    print("     quartic Fisher-weighted term at converged anchors, zero under A1.")

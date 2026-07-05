@@ -66,7 +66,7 @@ conditional is the mixture — the information-geometric analogue of the
 | Distortion floor | **closed form**: density-weighted JSD |
 | Optimal merge | mixture of conditionals replaces Σ-weighted mean |
 | Monotone gate + QP corollary | **unchanged** — they act on `⟨g, ∇L_A⟩ = dL_A/dt`, never used squared loss |
-| Leakage law | quadratic term: residual-weighted; converged-anchor order inherits from Fisher-weighted curvature (not re-derived here) |
+| Leakage law | **transfers verbatim**: `(η²/2)E[(μ−y)ᵀκ] + (η⁴/8)E[κᵀH_φκ]` with the head's Fisher metric `H_φ` replacing the identity (validated: slopes 2.00/4.02, coefficients to 1%) |
 
 ## The T-task floor is a conditional mutual information (exact)
 
