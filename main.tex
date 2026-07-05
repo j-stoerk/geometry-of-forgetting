@@ -605,7 +605,11 @@ $\delta\to0$ even at fixed $I(T;\phi)>0$, so no tight weight-free constant can r
 the floor to mutual information. The same identity extends to $K$ tasks with arbitrary
 priors, with corresponding multiclass entropy bounds in terms of the Gini impurity
 (Sec.~\ref{si:mi}); both the binary identity and the multiclass bounds are verified
-numerically there. Under squared loss,
+numerically there. Under cross-entropy the sandwich closes to an \emph{identity}: for
+any number of tasks, the floor of a single predictor equals $T\cdot I(T;Y\mid X)$---the
+conditional mutual information between task identity and label given the input---and
+removability becomes the statement $Y\perp T\mid X$
+(Sec.~\ref{si:beyond}). Under squared loss,
 Theorem~\ref{thm:functional} also recovers the standard per-task forgetting term used
 in the Forgetting Measure and Backward Transfer; Theorem~\ref{thm:mi} therefore gives a
 lower bound on the average forgetting achievable by any single-head method in terms of
@@ -2396,7 +2400,25 @@ density-weighted \emph{mixture} $q^\ast=(p_A\pi_A+p_B\pi_B)/(p_A+p_B)$, giving
 a weighted Jensen--Shannon divergence between the tasks' conditionals; the quadratic
 floor of Theorem~\ref{thm:merge}'s function-space form is its small-divergence
 (Gaussian) limit, and the mixture replaces the $\Sig$-weighted mean as the optimal
-joint predictor. \emph{(iii)} The sign gate and Corollary~\ref{cor:qpgate} act on
+joint predictor. For $T$ tasks with uniform prior the floor becomes an
+\emph{information identity}: writing $T$ for the task variable, $X$ for the input, and
+$Y$ for the label,
+\begin{equation}
+\mathcal{D}^\star_T=\sum_x\sum_t p_t(x)\,\mathrm{KL}\!\big(\pi_t\,\|\,\bar\pi_x\big)
+=T\cdot I(T;Y\mid X)=T\,\big[H(Y\mid X)-H(Y\mid X,T)\big],
+\label{eq:infofloor}
+\end{equation}
+the conditional mutual information between task identity and label---the exact
+label-entropy cost of hiding which task a sample came from. The entropy
+\emph{sandwich} of Theorem~\ref{thm:mi} (quadratic loss) thus closes to an equality
+under the loss language models train, removability becomes $Y\perp T\mid X$, and the
+floor is attained, not merely bounded: a trained shared softmax head converges to
+Eq.~\eqref{eq:infofloor} from above with terminal gap $6\times10^{-16}$
+(\texttt{evaluate\_info\_floor.py}; identity and mixture-optimality checks at
+$10^{-16}$). Operationally, the irreducible single-model floor of an LLM domain
+stream is $I(\text{domain};\text{next token}\mid\text{context})$, estimable from
+micro-caches as the mean per-domain versus mixture log-likelihood ratio.
+\emph{(iii)} The sign gate and Corollary~\ref{cor:qpgate} act on
 $\langle g,\nabla L_A\rangle=dL_A/dt$ and never used the quadratic form, so they are the
 exact monotone controller for cross-entropy as stated---the language-model gate
 experiments of Sec.~\ref{si:llm} therefore run the exact controller for the loss they
