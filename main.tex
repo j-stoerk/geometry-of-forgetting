@@ -2196,7 +2196,20 @@ budget over a stream of mixed tasks, allocating exemplars in proportion to each 
 anchor task $28\pm31\%$ better than a uniform budget, improving in $18$ of $20$ seeds.
 Structural allocation handles the disjoint tasks for free, and memory concentrates where the
 geometry says forgetting is otherwise unavoidable: the fast system supplies rehearsal, the
-functional decides when it is needed.
+functional decides when it is needed. The floor sharpens this principle into an exact
+policy. Full rehearsal converges to the joint optimum, which lands every task precisely
+\emph{at} its floor share and never below it (verified to $3\times10^{-17}$;
+\texttt{evaluate\_replay\_policy.py}): rehearsal cannot buy back the floor, so the
+\emph{value} of replaying task $t$ is its recoverable excess $L_t-\mathcal{D}^\star_t$,
+and the optimal fixed-budget allocation is the fractional knapsack---greedy in
+recoverable excess per exemplar (matches the enumerated optimum in $20$ of $20$ random
+instances). Floor-\emph{proportional} allocation is the valid proxy when damage scales
+with conflict, the regime of the experiment above; it misallocates in two identifiable
+regimes---a task already at its floor has zero replay value however large that floor,
+and a zero-floor task damaged by capacity coupling is fully recoverable despite its
+floor---where it drops below even a uniform budget ($3.56$ versus $2.71$; optimum
+$2.17$). All three quantities in the policy---damage, floor, cost---are pre-flight
+measurables of the ledger.
 
 \paragraph{The subspace state is a replay generator.} In the exact regime, the state
 \IGFA{} already carries---the basis $U$, its eigenvalues, and a weight snapshot---is a
