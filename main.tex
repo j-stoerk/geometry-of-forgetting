@@ -447,7 +447,14 @@ Eq.~\eqref{eq:funcspace-main}: under A1, $\Del\!f=\Del^\top\phi$ recovers
 $\tfrac12\Del^\top\Sig_A\Del$. The dichotomy, the distortion floor
 (Sec.~\ref{sec:theory:merge}), and the retention guarantee thus hold with A1 removed
 entirely, with feature support replaced by input support; A1 is the regime in which the
-geometry becomes computable in closed form and finite steps stay exact. The full
+geometry becomes computable in closed form and finite steps stay exact. Nor is the
+geometry a quadratic-loss artifact: for the whole canonical (Bregman) loss
+family---softmax cross-entropy included---the identity holds exactly with the energy
+replaced by a Bregman divergence. On a converged task, cross-entropy forgetting
+\emph{equals} the expected Kullback--Leibler divergence between the old and new
+predictive distributions on that task's data, and the distortion floor becomes a
+density-weighted Jensen--Shannon divergence between the tasks' conditionals, in closed
+form (Sec.~\ref{si:beyond}). The full
 statement, proofs, and validations on deep networks---machine-precision agreement at
 depths where the frozen-curvature predictor degrades to $r\approx0.4$---are in
 Sec.~\ref{si:beyond}, along with two routes to finite-step parameter-space exactness
@@ -1117,7 +1124,9 @@ so the strongest are not read as the broadest. \emph{(I) Exact.} In frozen-featu
 settings (A1) and, architecture-free, in function space
 (Theorem~\ref{thm:funcspace}): the interference identity, the removability dichotomy, the
 $\Sig$-orthogonal optimal merge, the distortion floor, and continuous-time exact
-retention. \emph{(II) Exact-with-quantified-residual.} End-to-end parameter-space
+retention---for squared loss and, in Bregman form, for the full canonical loss family
+including cross-entropy, where the energy is a KL divergence and the floor a weighted
+Jensen--Shannon divergence (Sec.~\ref{si:beyond}). \emph{(II) Exact-with-quantified-residual.} End-to-end parameter-space
 retention, exact up to the basis error of Proposition~\ref{prop:esterror} and the
 finite-step remainder of Theorem~\ref{thm:general}, both measured. \emph{(III)
 Empirically supported.} The multi-seed benchmark results---Split-Digits, Rotated-Digits,
@@ -2353,6 +2362,47 @@ inequality constraints are hardened to equalities---never better in the exact re
 statements are machine-checked ($\|v^\ast-v_{\mathrm{gate}}\|=0$ at $m=1$; feasibility to
 $10^{-15}$; measured protected-rate decrease under full activation;
 \texttt{evaluate\_functional\_control.py}).
+
+\paragraph{Beyond squared loss: the Bregman family.} The function-space results are not
+quadratic-loss artifacts. For any canonical loss $\ell(y,f)=\varphi(f)-y^\top f$ with
+$\varphi$ convex and mean map $\mu=\nabla\varphi$ (squared loss:
+$\varphi=\tfrac12\|f\|^2$; softmax cross-entropy: $\varphi=\mathrm{logsumexp}$,
+$\mu=\mathrm{softmax}$; logistic and Poisson likewise), the definition of the Bregman
+divergence $D_\varphi(b,a)=\varphi(b)-\varphi(a)-\mu(a)^\top(b-a)$ gives, exactly and for
+any finite functional change,
+\begin{equation}
+\Delta L_A=\mathbb{E}_{D_A}\!\big[(\mu_A-y)^\top\Delta\!f\big]
++\mathbb{E}_{D_A}\!\big[D_\varphi(f_B,f_A)\big],
+\label{eq:bregman}
+\end{equation}
+of which Eq.~\eqref{eq:funcspace} is the quadratic case. For cross-entropy,
+$D_\varphi(f_B,f_A)=\mathrm{KL}(p_A\,\|\,p_B)$ exactly, so on a converged task
+($\mu_A=y$ on $\mathrm{supp}\,D_A$) forgetting \emph{is} the expected
+Kullback--Leibler divergence between the old and new predictive distributions. Three
+consequences follow. \emph{(i)} The removability dichotomy is loss-free: under A1 a
+kernel step changes no function value on the support, hence $\Delta L_A=0$ exactly at
+any finite step size for \emph{any} loss (validated at $\|\Delta W\|=10$); for softmax
+the lossless set is strictly larger, since per-sample constant logit shifts are
+invisible. Only the closed quadratic \emph{energy formula} is squared-loss-specific.
+\emph{(ii)} The distortion floor has a closed information-geometric form: pointwise,
+$\min_q\,[\,p_A\mathrm{KL}(\pi_A\|q)+p_B\mathrm{KL}(\pi_B\|q)\,]$ is attained at the
+density-weighted \emph{mixture} $q^\ast=(p_A\pi_A+p_B\pi_B)/(p_A+p_B)$, giving
+\begin{equation}
+\text{floor}=\!\int\!\big(p_A(x)+p_B(x)\big)\,
+\mathrm{JSD}_{w(x)}\!\big(\pi_A(\cdot|x),\pi_B(\cdot|x)\big)\,dx,
+\qquad w=\tfrac{p_A}{p_A+p_B},
+\label{eq:jsdfloor}
+\end{equation}
+a weighted Jensen--Shannon divergence between the tasks' conditionals; the quadratic
+floor of Theorem~\ref{thm:merge}'s function-space form is its small-divergence
+(Gaussian) limit, and the mixture replaces the $\Sig$-weighted mean as the optimal
+joint predictor. \emph{(iii)} The sign gate and Corollary~\ref{cor:qpgate} act on
+$\langle g,\nabla L_A\rangle=dL_A/dt$ and never used the quadratic form, so they are the
+exact monotone controller for cross-entropy as stated---the language-model gate
+experiments of Sec.~\ref{si:llm} therefore run the exact controller for the loss they
+train, not a transferred heuristic. All four statements are validated to machine
+precision ($10^{-16}$; kernel step exactly $0$), with the closed-form floor checked
+against direct numerical minimization (\texttt{evaluate\_bregman\_identity.py}).
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
