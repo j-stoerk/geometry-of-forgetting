@@ -131,7 +131,8 @@ class LedgerRow:
     free_capacity: float                # (cap - occupied)/cap in [0,1], or nan
     drift_velocity: float               # subspace slew (boundary/drift signal)
     ood_ratio: float                    # ||UU^T g||/||g|| (1=in-distribution, low=OOD)
-    replay_value: float                 # predicted floor if memory available, else 0
+    replay_value: float                 # RECOVERABLE excess above the floor (replay
+                                        # cannot beat the floor), 0 if no memory
     confidence: float                   # estimator confidence in [0,1]
 
 
@@ -224,9 +225,14 @@ class InterferenceLedger:
             else self.tracker.subspace(self.r)
         dens, mx = self.shared_density(B_new)
         floor = self.floor_estimate(B_new, target_new)
+        energy = self.interference_energy(g)
+        # Replay value = RECOVERABLE excess: full rehearsal lands a task AT its
+        # floor, never below (evaluate_replay_policy.py, P1), so the floor part
+        # of the predicted damage cannot be bought back -- only the rest can.
+        recoverable = max(energy - floor, 0.0)
         row = LedgerRow(
             step=self._step,
-            interference_energy=self.interference_energy(g),
+            interference_energy=energy,
             interference_rate=(self.interference_rate(g, grad_protected)
                                if grad_protected is not None else float("nan")),
             shared_density=dens, max_overlap=mx, floor_estimate=floor,
@@ -234,7 +240,7 @@ class InterferenceLedger:
             free_capacity=self.free_capacity(),
             drift_velocity=self.tracker.drift_velocity(),
             ood_ratio=self.ood_ratio(g),
-            replay_value=(floor if memory_available else 0.0),
+            replay_value=(recoverable if memory_available else 0.0),
             confidence=self.confidence(),
         )
         self.rows.append(row)

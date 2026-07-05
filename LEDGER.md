@@ -56,7 +56,7 @@ task head; `λ` the geometry spectrum.
 | **Free capacity** | `(cap − occupied)/cap` ∈ [0,1] | — | expansion trigger | O(1) | per task |
 | **Drift velocity** | `‖P_{Uₜ}P_{Uₜ₋₁} − P_{Uₜ₋₁}P_{Uₜ}‖_F` | — | boundary / shift detection | O(d r²) | per step/task |
 | **OOD ratio** | `‖UUᵀg‖/‖g‖` ∈ [0,1] | — | skip noise/OOD batches | O(dr) | per step |
-| **Replay value** | predicted floor if memory available, else 0 | loss | where to spend rehearsal | O(d r T) | per task |
+| **Replay value** | recoverable excess `max(damage − floor, 0)`; replay lands AT the floor, never below | loss | where to spend rehearsal: greedy in value/cost is knapsack-optimal | O(d r T) | per task |
 | **Confidence** | warmup × drift-penalty ∈ [0,1] | — | conservative defaults when low | O(1) | per step |
 
 **Core vs diagnostic.** Core (required for control): interference rate, drift
