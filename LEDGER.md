@@ -10,6 +10,32 @@ Reference implementation: [`interference_ledger.py`](interference_ledger.py).
 Validation (decision quality vs fixed strategies + oracle):
 [`demo_interference_controller.py`](demo_interference_controller.py).
 
+## Install & quickstart
+
+```bash
+pip install -e .          # from this directory (numpy-only core)
+python test_ledger.py     # smoke tests
+```
+
+```python
+import numpy as np
+from interference_ledger import InterferenceLedger, InterferenceController
+
+led = InterferenceLedger(dim=768, rank=8, capacity=64)
+ctl = InterferenceController(led, memory_budget=16)
+
+led.register_task(features_task0, target=w0)   # protect what matters
+led.tracker.update(feature_batch)              # every batch: track geometry
+dec = ctl.decide(grad_new, Phi_new=feature_batch,
+                 grad_protected=grad_of_protected_loss)
+# dec.action in {share, project, replay, expand, defer, skip}; dec.reason says why
+row = led.log(grad_new)                        # one LedgerRow per step: the panel
+```
+
+Cross-entropy / LLM streams: `kl_interference(p_old, p_new)` is the exact CE
+forgetting on a micro-cache, and `jsd_floor(pi_a, pi_b, dens_a, dens_b)` the
+closed-form irreducible floor (see `NOTE_bregman_generalization.md`).
+
 ---
 
 ## Core metrics

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "interference-ledger"
+version = "0.1.0"
+description = "The interference ledger: measurable geometry (interference energy/rate, shared density, KL/JSD floors, occupied rank, drift velocity) and a geometry-driven controller (share / project / replay / expand / defer / skip) for adaptive models under drift."
+readme = "LEDGER.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Julius Stoerk" }]
+keywords = ["continual-learning", "catastrophic-forgetting", "interference", "model-merging", "drift"]
+dependencies = ["numpy>=1.22"]
+
+[project.optional-dependencies]
+demos = ["scipy>=1.8"]
+
+[project.urls]
+Repository = "https://github.com/j-stoerk/geometry-of-forgetting"
+
+[tool.setuptools]
+py-modules = ["interference_ledger"]

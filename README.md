@@ -11,6 +11,15 @@ removability dichotomy, an irreducible distortion floor tied to task inference, 
 optimal-merge identity (Σ-orthogonalization), and igfa — a replay-free, Fisher-free
 allocation rule that shares capacity when tasks align and orthogonalizes under conflict.
 
+**Toolkit.** The measurable side of the paper ships as a small pip-installable
+package: the [interference ledger](LEDGER.md) (`pip install -e .`) computes the
+metric panel (interference energy/rate, shared density, KL/JSD floors, occupied
+rank, drift velocity, OOD ratio) and a geometry-driven controller
+(share / project / replay / expand / defer / skip). See [LEDGER.md](LEDGER.md)
+for the quickstart, [PREFLIGHT.md](PREFLIGHT.md) for the decision-before-training
+protocol, and the `NOTE_*.md` files for theory notes with machine-precision
+validation scripts (`test_ledger.py` runs the smoke tests).
+
 ## Reproducing the results
 
 All simulation figures and numbers regenerate from fixed seeds:

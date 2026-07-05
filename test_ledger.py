@@ -1,0 +1,79 @@
+# Smoke tests for the interference-ledger toolkit (pytest or plain python).
+import numpy as np
+from interference_ledger import (GeometryTracker, InterferenceLedger,
+                                  InterferenceController, principal_overlap,
+                                  kl_interference, jsd_floor)
+
+rg = np.random.default_rng(0)
+def orth(d, r): return np.linalg.qr(rg.standard_normal((d, r)))[0]
+
+def test_tracker_recovers_subspace():
+    d, r = 30, 4
+    B = orth(d, r)
+    tr = GeometryTracker(d, rank=r, decay=0.8)
+    for _ in range(40):
+        tr.update(rg.standard_normal((64, r)) @ B.T)
+    assert principal_overlap(tr.subspace(r), B) > 0.99
+
+def test_fd_sketch_matches_recursive():
+    d, r = 30, 4
+    B = orth(d, r)
+    a = GeometryTracker(d, rank=r, decay=0.8)
+    b = GeometryTracker(d, rank=r, decay=0.8, method="fd", ell=2 * r)
+    for _ in range(40):
+        X = rg.standard_normal((64, r)) @ B.T
+        a.update(X); b.update(X)
+    assert principal_overlap(a.subspace(r), b.subspace(r)) > 0.98
+
+def test_drift_velocity_spikes_at_boundary():
+    d, r = 30, 4
+    tr = GeometryTracker(d, rank=r, decay=0.8)
+    B1, B2 = orth(d, r), orth(d, r)
+    v_steady, v_switch = [], []
+    for i in range(60):
+        tr.update(rg.standard_normal((64, r)) @ (B1 if i < 30 else B2).T)
+        (v_steady if 10 < i < 30 or i > 45 else v_switch).append(tr.drift_velocity())
+    assert max(v_switch[20:24] or [1]) > 3 * (np.mean(v_steady) + 1e-9)
+
+def test_ledger_metrics_sane():
+    d = 30
+    led = InterferenceLedger(d, rank=4, capacity=12, warmup_steps=2)
+    B = orth(d, 4)
+    led.register_task(rg.standard_normal((64, 4)) @ B.T, target=B @ np.ones(4))
+    led.tracker.update(rg.standard_normal((64, 4)) @ B.T)
+    g = B @ rg.standard_normal(4)
+    row = led.log(g, Phi_new=rg.standard_normal((64, 4)) @ B.T)
+    assert row.interference_energy > 0
+    assert 0.9 < row.max_overlap <= 1.0 + 1e-9
+    assert 0 <= row.ood_ratio <= 1 + 1e-9
+
+def test_controller_regimes():
+    d = 30
+    led = InterferenceLedger(d, rank=4, capacity=40, warmup_steps=1)
+    ctl = InterferenceController(led, memory_budget=4, conf_floor=0.0)
+    B = orth(d, 4); w = B @ np.ones(4)
+    for _ in range(5):
+        led.tracker.update(rg.standard_normal((64, 4)) @ B.T)
+    led.register_task(rg.standard_normal((64, 4)) @ B.T, target=w)
+    gp = B @ B.T @ (np.zeros(d) - w)                       # grad of protected loss
+    # decide() takes the NEW task's gradient g; the update is -g, so
+    # rate = <g, grad_protected> < 0 means the step ASCENDS the protected loss.
+    conflict = ctl.decide(-gp, grad_protected=gp)           # rate < 0: conflict
+    share = ctl.decide(gp * 1.0, grad_protected=gp)         # rate > 0: aligned/transfer
+    assert conflict.action in ("project", "replay", "defer", "expand")
+    assert share.action in ("share", "route")
+
+def test_bregman_helpers():
+    sm = lambda F: np.exp(F - F.max(1, keepdims=True)) / np.exp(F - F.max(1, keepdims=True)).sum(1, keepdims=True)
+    p, q = sm(rg.standard_normal((40, 5))), sm(rg.standard_normal((40, 5)))
+    assert kl_interference(p, p) < 1e-12
+    assert kl_interference(p, q) > 0
+    d1, d2 = rg.uniform(0.5, 2, 40), rg.uniform(0.5, 2, 40)
+    assert jsd_floor(p, p, d1, d2) < 1e-12
+    assert jsd_floor(p, q, d1, d2) > 0
+
+if __name__ == "__main__":
+    for name, fn in sorted({k: v for k, v in globals().items()
+                            if k.startswith("test_")}.items()):
+        fn(); print(f"  {name}: OK")
+    print("all ledger smoke tests passed")
