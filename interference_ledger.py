@@ -359,3 +359,33 @@ def _shared_directions(Ba: np.ndarray, Bb: np.ndarray, tol: float = 0.3) -> np.n
     w, V = np.linalg.eigh(M)
     keep = w > tol
     return Ba @ V[:, keep] if keep.any() else np.zeros((Ba.shape[0], 0))
+
+
+# ---------------------------------------------------------------------
+#  Bregman / cross-entropy forms (NOTE_bregman_generalization.md).
+#  The quadratic metrics above are the Gaussian case; for categorical
+#  outputs (classification, LLMs) the exact forms are these.
+# ---------------------------------------------------------------------
+def kl_interference(p_old: np.ndarray, p_new: np.ndarray) -> float:
+    """Exact CE forgetting on a converged task: E[KL(p_old || p_new)].
+
+    p_old, p_new: (n, K) predictive distributions of the protected model
+    and the updated model on the protected data (e.g. a micro-cache).
+    """
+    p_old = np.asarray(p_old, float); p_new = np.asarray(p_new, float)
+    return float(np.mean((p_old * (np.log(p_old + 1e-300)
+                                   - np.log(p_new + 1e-300))).sum(-1)))
+
+
+def jsd_floor(pi_a: np.ndarray, pi_b: np.ndarray,
+              dens_a: np.ndarray, dens_b: np.ndarray) -> float:
+    """Closed-form irreducible floor for one predictor serving two tasks
+    with conditionals pi_a, pi_b (n, K) and input densities dens_a,
+    dens_b (n,) on a shared sample: sum (p_A+p_B) JSD_w(pi_A, pi_B),
+    minimizer = density-weighted mixture.  Quadratic floor = its
+    small-divergence limit."""
+    pi_a = np.asarray(pi_a, float); pi_b = np.asarray(pi_b, float)
+    da = np.asarray(dens_a, float)[:, None]; db = np.asarray(dens_b, float)[:, None]
+    q = (da * pi_a + db * pi_b) / (da + db)
+    kl = lambda p: (p * (np.log(p + 1e-300) - np.log(q + 1e-300))).sum(-1)
+    return float(np.mean(da[:, 0] * kl(pi_a) + db[:, 0] * kl(pi_b)))
