@@ -1143,6 +1143,25 @@ labelled in the Supporting Information as \emph{proved-in-A1}, \emph{empirical m
 probe}, or \emph{forward-looking conjecture}, so that scope of ambition never inflates
 scope of proof.
 
+\paragraph{Forgetting decomposes into incompatibility, capacity, and control.} The
+results above assemble into an attribution identity. Writing $\mathcal{D}^\star_\infty$
+for the floor of any single predictor (Theorem~\ref{thm:mi}; under cross-entropy the
+conditional mutual information), $\mathcal{D}^\star_{\mathrm{class}}$ for the optimum of
+the \emph{deployed} class (width, rank, architecture), and $L$ for what training
+achieved, every observed forgetting level splits exactly, term by non-negative term,
+into $L=\mathcal{D}^\star_\infty+[\mathcal{D}^\star_{\mathrm{class}}-\mathcal{D}^\star_\infty]
++[L-\mathcal{D}^\star_{\mathrm{class}}]$: \emph{incompatibility}, a property of the task
+family that no gate, replay, or width removes; \emph{capacity}, a property of the model
+class that only widening or routing removes; and \emph{control}, a property of the
+training policy that only a better gate, replay schedule, or ordering removes. In the
+exact regime each intervention moves only its own term---widening eliminates the
+capacity term while no policy touches it, the active-set gate cuts the control term
+while the floor is invariant throughout (Sec.~\ref{si:beyond}). The practical
+consequence is a diagnosis rule that precedes every method choice in this paper's
+taxonomy: measure which term dominates---floor from the data, class optimum from the
+deployed geometry, control as the remainder---\emph{before} buying a cure, because each
+family of continual-learning methods can repair exactly one of the three.
+
 The central assumption is A1. For frozen backbones and PEFT, the regime most
 practical deployments now occupy, it is exact and the results stand without
 approximation, as the real-data identity at $r=0.999$ confirms. For full networks it is
@@ -2438,6 +2457,32 @@ experiments of Sec.~\ref{si:llm} therefore run the exact controller for the loss
 train, not a transferred heuristic. All four statements are validated to machine
 precision ($10^{-16}$; kernel step exactly $0$), with the closed-form floor checked
 against direct numerical minimization (\texttt{evaluate\_bregman\_identity.py}).
+
+\paragraph{The forgetting decomposition, validated.} With
+$\mathcal{D}^\star_\infty\le\mathcal{D}^\star_{\mathrm{class}}\le L$ as defined in the
+Discussion,
+\begin{equation}
+L=\underbrace{\mathcal{D}^\star_\infty}_{\text{incompatibility}}
++\underbrace{\big[\mathcal{D}^\star_{\mathrm{class}}-\mathcal{D}^\star_\infty\big]}_{\text{capacity}}
++\underbrace{\big[L-\mathcal{D}^\star_{\mathrm{class}}\big]}_{\text{control}},
+\label{eq:decomposition}
+\end{equation}
+an identity whose content is that the three terms are separately measurable and
+separately treatable. Three single-regime streams land their intended term (ten seeds;
+\texttt{evaluate\_forgetting\_decomposition.py}): pure conflict under full replay is all
+floor ($12.39/0/0$); input-disjoint tasks squeezed through width-$12$ features are all
+capacity ($0/5.35/0$); mixed tasks under naive training carry floor plus control
+($5.42/0/4.04$). The intervention matrix attributes cleanly: widening the features
+$12\to24$ removes $100\%$ of the capacity term while no policy---naive, active-set, or
+full replay---moves it at all ($6.02$ untouched by all three); upgrading the policy cuts
+only the control term ($4.65\to2.15$, floor invariant throughout). Two definitional
+points the construction forces into the open: \emph{capacity} means representation
+width---the ``best rank-$r$ subspace containing the solution'' notion collapses, since
+any single optimum spans one dimension---and, in the quadratic regime,
+\emph{perturbed} copies of a subspace are not conflict (their soft constraints are
+jointly satisfiable and the floor is exactly zero; genuine conflict requires exactly
+shared support, a knife-edge the cross-entropy floor does not have, being nonzero
+whenever conditionals disagree on overlapping support).
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
