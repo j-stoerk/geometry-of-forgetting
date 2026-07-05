@@ -122,6 +122,13 @@ lower confidence, prefer defer.
   `ℓ ≥ 2r` — the validated sizing rule). Decay `γ ≈ 0.6`; update per batch.
 - **Interference rate** at scale: `∇L_u` from a micro-cache (a few thousand
   tokens/domain), the anchor construction, or the dream-state second moment.
+- **Floor estimation at small n**: plug-in floors are biased *upward* ~1/n
+  (noise reads as disagreement — identical tasks look conflicting at
+  micro-cache sizes). Use the Miller–Madow entropy correction and flag
+  conflict only above the 95th percentile of the exchangeability null
+  (resample all tasks from the pooled conditional); otherwise **defer**.
+  Validated: false-conflict 100/100 → 12/100 at n=150, power 95/100
+  (`evaluate_floor_estimation.py`).
 - **Confidence** calibration: `warmup_steps ≈ 20` for per-batch training,
   `≈ 3–5` for per-task streams. Known limitation: a clean task boundary raises
   `drift_velocity` (correct as a *boundary* signal) which currently also lowers
