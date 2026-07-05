@@ -68,6 +68,28 @@ conditional is the mixture — the information-geometric analogue of the
 | Monotone gate + QP corollary | **unchanged** — they act on `⟨g, ∇L_A⟩ = dL_A/dt`, never used squared loss |
 | Leakage law | quadratic term: residual-weighted; converged-anchor order inherits from Fisher-weighted curvature (not re-derived here) |
 
+## The T-task floor is a conditional mutual information (exact)
+
+Generalizing the JSD floor to T tasks (uniform prior) and rewriting the
+generalized Jensen–Shannon divergence as an information quantity
+([`evaluate_info_floor.py`](evaluate_info_floor.py), all checks ≤ 6e-16):
+
+```
+D*_T  =  Σ_x Σ_t p_t(x) KL(π_t ‖ π̄_x)  =  T · I(T ; Y | X)
+      =  T · [ H(Y|X) − H(Y|X,T) ]
+```
+
+with the minimizer the density-weighted mixture `π̄`. The floor of a single
+predictor over a task family **is** the conditional mutual information between
+task identity and label given input — the label-entropy cost of hiding the
+task. Removability ⟺ `I(T;Y|X) = 0` ⟺ conditionals agree wherever supports
+overlap. The paper's Theorem (mi) proves a *sandwich* of entropy bounds for the
+quadratic case; under cross-entropy the sandwich closes to an identity. A
+trained shared softmax head converges to this floor from above (gap 6e-16), so
+it is attained, not merely bounded. Operationally, for an LLM domain stream:
+*the irreducible single-model floor equals I(domain ; next-token | context)*,
+estimable from micro-caches as mean per-domain vs mixture log-likelihood ratio.
+
 ## The retroactive payoff
 
 The GPT-2 / pythia functional-gate experiments gate on cross-entropy gradients.
