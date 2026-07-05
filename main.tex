@@ -1713,6 +1713,25 @@ without an input-geometry signal is its regime (language), dense conflict belong
 subspace projection, and the stream's shared density selects the tool in advance, which
 is the deployment rule of the Method section.
 
+The under-enforcement just described is not a ceiling of the approach but a property of
+\emph{sampling} one constraint per step, and Corollary~\ref{cor:qpgate} prescribes the
+repair: enforce the full active set. Testing that prescription on the
+\texttt{pythia-410m} stream (all past domains' micro-cache gradients constrained per
+step via the corollary's nonnegative least squares; $+21\%$ wall-clock over the sampled
+gate; three seeds) yields the strongest language result in this paper: final loss
+$3.536\pm0.005$ and forgetting $+0.206\pm0.005$, improving on naive
+($3.625$/$+0.324$), unconditional protection ($3.617$/$+0.319$), and the sampled sign
+gate ($3.605$/$+0.300$) on \emph{both} axes simultaneously---a $36\%$ reduction in
+forgetting relative to naive together with the best adaptation of any arm. Every
+pairwise gap exceeds fourteen standard errors (conservative unpaired Welch tests from
+the summary statistics give $p\le5\times10^{-4}$ throughout; the per-seed records of
+this session were lost before archiving, so exact paired tests are pending, and the
+naive arm reproduces the preceding session's values within one standard deviation). The
+sampled gate's modest margins were therefore under-enforcement of the monotone-retention
+QP, as the exact-regime analysis predicted; whether the same repair closes the
+dense-conflict vision gap is a committed prediction, not yet run
+(\texttt{kaggle\_sign\_gate\_vit.py}, \texttt{func-active} arm).
+
 Running the earlier probe protocol on real text (GPT-2, sequential LoRA on four AG-News
 topic domains, three seeds; \texttt{kaggle\_probe\_gate\_llm.py},
 \texttt{probe\_gate\_results.json}) yields three findings. First, the probe signal transfers: the probe cosines form a stable,
