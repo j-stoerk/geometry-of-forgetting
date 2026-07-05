@@ -1160,7 +1160,15 @@ while the floor is invariant throughout (Sec.~\ref{si:beyond}). The practical
 consequence is a diagnosis rule that precedes every method choice in this paper's
 taxonomy: measure which term dominates---floor from the data, class optimum from the
 deployed geometry, control as the remainder---\emph{before} buying a cure, because each
-family of continual-learning methods can repair exactly one of the three.
+family of continual-learning methods can repair exactly one of the three. A further
+split follows from the identity's anchor: evaluated on the deployment rather than the
+training distribution, forgetting separates into knowledge loss and memorization loss,
+and the two can carry opposite signs---an interfering update can raise train loss while
+\emph{improving} the deployed function, so part of what benchmarks report as
+catastrophic forgetting is implicit unlearning of noise. Protection must therefore
+anchor on validated data: a gate fed training gradients defends memorized noise as if
+it were knowledge, and is dominated on both axes by its held-out-anchored counterpart
+(Sec.~\ref{si:beyond}).
 
 The central assumption is A1. For frozen backbones and PEFT, the regime most
 practical deployments now occupy, it is exact and the results stand without
@@ -2483,6 +2491,29 @@ any single optimum spans one dimension---and, in the quadratic regime,
 jointly satisfiable and the floor is exactly zero; genuine conflict requires exactly
 shared support, a knife-edge the cross-entropy floor does not have, being nonzero
 whenever conditionals disagree on overlapping support).
+
+\paragraph{Benign forgetting: the anchor splits knowledge from memorization.} The
+interference identity is distribution-anchored, and nothing requires the anchor to be
+the training set. Evaluated on task $A$'s \emph{deployment} distribution the same
+identity splits observed forgetting into knowledge loss, $\Delta L_A^{\mathrm{test}}$,
+and memorization loss, $\Delta L_A^{\mathrm{train}}-\Delta L_A^{\mathrm{test}}$---and
+the two can carry opposite signs. In an overparameterized interpolation setting with
+label noise (ten seeds; \texttt{evaluate\_benign\_forgetting.py}), an interfering update
+raises train loss by $+1.99$---catastrophic forgetting under any train-anchored
+metric---while \emph{lowering} deployment loss by $-3.37$: backward transfer through
+noise removal, with the sign predicted exactly by the test-anchored identity
+($8\times10^{-16}$). Part of what benchmarks report as catastrophic forgetting is
+implicit unlearning of noise. The consequence for protection is a design law:
+\emph{protect the function you validated, not the function you fit}. A gate whose
+constraint gradient is anchored on training data defends the memorized noise together
+with the knowledge---it blocks benign repair and pays adaptation for the privilege---
+whereas the held-out-anchored gate dominates it on \emph{both} axes (final deployment
+loss of the protected task $8.3$ versus $22.0$; adaptation $5.4$ versus $7.1$). The
+anchor's own quality gates the gate: with a held-out set too small to be validated
+itself ($M=30<d$, the anchor interpolates its own noise) the advantage collapses,
+which is the estimation--abstention rule's other face. The held-out micro-caches used
+throughout the language experiments (Sec.~\ref{si:llm}) are therefore mandated by the
+theory, not merely hygienic.
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
