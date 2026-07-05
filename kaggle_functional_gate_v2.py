@@ -30,6 +30,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from scipy import stats
+from scipy.optimize import nnls
 
 RUN_P1 = False
 RUN_P2 = True
@@ -66,7 +67,7 @@ def tlog(m):
         f.write(f"[{time.time()-T0:7.1f}s] {m}\n")
 
 
-SCRIPT_VERSION = "v3.2-active-set"
+SCRIPT_VERSION = "v3.3-resume"
 
 
 class LoRA(nn.Module):
@@ -389,9 +390,8 @@ def run_stream(seed, method, device, doms, model_name):
                     if float(nA.norm() ** 2) > 1e-12:
                         cols.append(nA)
                 if cols:
-                    from scipy.optimize import nnls as _nnls
                     Gm = torch.stack(cols, 1).cpu().double().numpy()
-                    lam, _ = _nnls(Gm, (-g).cpu().double().numpy())
+                    lam, _ = nnls(Gm, (-g).cpu().double().numpy())
                     if lam.any():
                         g = g + torch.as_tensor(Gm @ lam, dtype=g.dtype,
                                                 device=g.device)
@@ -450,33 +450,44 @@ def run_stream(seed, method, device, doms, model_name):
 
 def run_part(tag, model_name, methods, seeds, doms, results):
     for method in methods:
-        per = {}
+        key = f"{tag}/{method}"
+        done = dict(results.get(key, {}))                 # resume: per-seed
+        per = {s: done[str(s)] for s in seeds if str(s) in done}
+        todo = [s for s in seeds if str(s) not in done]
+        if per:
+            log(f"{key}: {len(per)}/{len(seeds)} seeds loaded from results file (resume)")
         if USE_THREADS and len(DEVICES) > 1:
             with ThreadPoolExecutor(len(DEVICES)) as ex:
                 futs = {
                     ex.submit(run_stream, s, method, DEVICES[i % len(DEVICES)], doms, model_name): s
-                    for i, s in enumerate(seeds)
+                    for i, s in enumerate(todo)
                 }
                 pending = set(futs)
                 while pending:
-                    done, pending = fwait(pending, timeout=120)
-                    for f in done:
+                    fin, pending = fwait(pending, timeout=120)
+                    for f in fin:
                         seed = futs[f]
                         try:
                             per[seed] = f.result()
                         except Exception as e:
-                            raise RuntimeError(f"{tag}/{method} failed on seed {seed}: {e}") from e
-                    log(f"{tag}/{method}: {len(seeds) - len(pending)}/{len(seeds)} seeds done")
+                            raise RuntimeError(f"{key} failed on seed {seed}: {e}") from e
+                        results[key] = {str(k): v for k, v in per.items()}
+                        with open("func_gate_v2_results.json", "w") as fj:
+                            json.dump(results, fj, indent=1)   # per-seed checkpoint
+                    log(f"{key}: {len(per)}/{len(seeds)} seeds done")
         else:
-            for i, s in enumerate(seeds):
+            for i, s in enumerate(todo):
                 device = DEVICES[i % len(DEVICES)]
                 try:
                     per[s] = run_stream(s, method, device, doms, model_name)
                 except Exception as e:
-                    raise RuntimeError(f"{tag}/{method} failed on seed {s}: {e}") from e
-                log(f"{tag}/{method}: {i + 1}/{len(seeds)} seeds done")
+                    raise RuntimeError(f"{key} failed on seed {s}: {e}") from e
+                results[key] = {str(k): v for k, v in per.items()}
+                with open("func_gate_v2_results.json", "w") as fj:
+                    json.dump(results, fj, indent=1)           # per-seed checkpoint
+                log(f"{key}: {len(per)}/{len(seeds)} seeds done")
 
-        results[f"{tag}/{method}"] = {str(s): per[s] for s in seeds}
+        results[key] = {str(s): per[s] for s in seeds}
 
         fm = [per[s]["final"] for s in seeds]
         gm = [per[s]["forget"] for s in seeds]
@@ -529,6 +540,12 @@ if __name__ == "__main__":
     log(f"USE_THREADS = {USE_THREADS}, LR_P1 = {LR_P1}, LR_P2 = {LR_P2}, ADAM_EPS = {ADAM_EPS}, MAX_GRAD_NORM = {MAX_GRAD_NORM}")
 
     results = {}
+    if os.path.exists("func_gate_v2_results.json"):       # resume from a prior session:
+        with open("func_gate_v2_results.json") as f:       # completed (tag/method, seed)
+            results = json.load(f)                         # entries are skipped, so only
+        log(f"RESUME: loaded {len(results)} completed method entries "
+            f"({sum(len(v) for v in results.values())} seed runs) -- these will be skipped. "
+            f"Delete func_gate_v2_results.json to rerun from scratch.")
 
     if RUN_P1:
         from transformers import GPT2TokenizerFast
