@@ -50,8 +50,7 @@
 \newcommand{\IGFA}{igfa}
 \newcommand{\OGD}{\textsc{ogd}}
 
-\title{\textbf{Forgetting as Interference in Continual Learning:
-Optimal Merging and Interference-Gated Allocation}}
+\title{\textbf{Interference and Retention in Continual Learning}}
 
 \author{Julius St\"ork$^{1,2,\ast}$\\[2pt]
 \small $^1$VARTA Microbattery GmbH, Ellwangen, Germany\\
@@ -67,32 +66,22 @@ Optimal Merging and Interference-Gated Allocation}}
 \begin{abstract}
 \noindent
 Continual learning commonly relies on post-hoc mechanisms such as replay, elastic
-regularization, or distillation, which mitigate interference only after it has
-occurred. This work instead models interference directly. In frozen-feature,
-linear heads, forgetting equals interference energy $\tfrac12\,\Del^\top\Sig_A\Del$ induced by a later update
-$\Del$, measured in the earlier task's input covariance $\Sig_A$. This identity extends to deep networks by measuring curvature along the path of the task loss, with only a small number of additional forward passes.
+regularization, or distillation. This work argues that forgetting should instead be modeled directly as interference between tasks.
+In the frozen-feature regime,
+forgetting from learning a new task is exactly the interference energy induced on the old task.
+In deep networks, the same quantity is recovered through path-averaged curvature with minimal additional forward passes.
 
-Two consequences follow. First, interference is removable when task supports are
-disjoint ($\Del\in\ker\Sig_A$); otherwise a non-zero distortion floor is
-unavoidable and is given by the posterior-variance-weighted target gap, with
-corresponding mutual-information bounds. Second, optimal model merging reduces to
-$\Sig$-orthogonalization of task vectors, and continual learning can be interpreted
-as its online greedy analogue.
+When task supports are disjoint, forgetting can be eliminated structurally.
+When they overlap in conflicting directions, a non-zero distortion floor is unavoidable.
+The same geometry optimally merges models through task-aware orthogonalization.
 
-Based on this view, this work introduces Interference-Gated Functional
+From this analysis we derive Interference-Gated Functional
 Allocation (\IGFA), a replay-free, Fisher-free method that shares
-capacity when a regime-specific task similarity exceeds $\sstar\approx0.26$ and orthogonalizes updates under conflict.
-Empirically, \IGFA{} yields lossless retention on disjoint supports and shifts
-unavoidable forgetting into deferred but recoverable plasticity. On Split-Digits it
-matches or exceeds strong replay-free and Fisher-free baselines, achieving $0.98$
-accuracy with near-zero forgetting using only a low-rank state summary. On
-Split-CIFAR-100 with a frozen ViT it reaches parity with the strongest structural
-baseline at the best retention level, without replay or Fisher information; on ImageNet-R
-its signed gate significantly exceeds unconditional projection at equal forgetting. At
-billion-parameter scale with \texttt{pythia-1b}, continual pretraining shows the
-same replay-free, Fisher-free retention mechanism achieving the lowest loss and the
-least forgetting, while a pre-flight diagnostic correctly predicts when retention is
-feasible.
+directions when tasks align and protects them when they conflict.
+Across benchmarks (CIFAR-100, Split-Digits, ImageNet-R), igfa achieves lossless retention when tasks are structurally
+separable and moves unavoidable cost from irreversible forgetting into deferred but recoverable plasticity when they are not.
+It matches the strongest replay-free structural baselines on dissimilar-task streams and
+improves on unconditional projection when similarity makes transfer worth preserving.
 \end{abstract}
 
 \vspace{1ex}
@@ -101,9 +90,9 @@ merging; neural tangent kernel; gradient projection; rate--distortion; represent
 
 \begin{figure}[t]\centering
 \includegraphics[width=0.9\textwidth]{fig_teaser}
-\caption{\textbf{Accuracy versus forgetting.}  Nine methods on
+\caption{\textbf{Accuracy versus forgetting.}  Nine methods are tested on
 the exact-A1 Rotated-Digits benchmark (five rotations, frozen random features; mean over
-$5$ seeds) are differentiated by method class (baseline / corrective / structural / merging); our
+$5$ seeds) and differentiated by method class (baseline / corrective / structural / merging); our
 methods are marked ``(ours)''; higher accuracy (up) and lower forgetting (right) are better. \emph{Corrective}
 (EWC, replay) and \emph{online structural} (\OGD{}/\textsc{gpm}, \IGFA) methods learn the
 stream sequentially, whereas \emph{merging} methods solve each rotation independently and
@@ -134,11 +123,11 @@ setting. Standard approaches such as replay
 \cite{lopezpaz2017,chaudhry2019,buzzega2020}, elastic weight consolidation
 \cite{kirkpatrick2017,zenke2017}, and distillation \cite{li2017lwf} mitigate this
 effect after interference has occurred. Although effective, these methods are
-primarily corrective: replay requires data storage and may raise privacy concerns,
+primarily corrective: replay requires data storage and raises privacy concerns,
 regularization constrains plasticity, and none directly characterizes when
 interference is unavoidable and when it can be eliminated.
 
-The analysis focuses on the regime in which
+This work focuses on the linear-on-features regime in which
 a frozen feature extractor $\phi(x)$ is paired with a trainable linear head,
 covering the common frozen-backbone and parameter-efficient fine-tuning
 (PEFT) settings and the first-order neural tangent \cite{jacot2018} approximation of
@@ -151,27 +140,40 @@ $A$, measuring which feature directions are active for that task.
 The same geometry predicts per-task forgetting accurately and
 extends approximately to deeper networks with feature drift.
 
-The functional has three consequences. First, the
-geometry of $\Sig_A$ only penalizes components in its active subspace and
-does not change task $A$'s loss for updates in the null space
-$\ker\Sig_A$. Interference is removable for disjoint task supports (reduces to ordinary orthogonality in isotropic geometry),
-whereas overlapping supports imply a non-zero distortion floor.
-Second, the same functional gives an optimality condition for model merging: task
-vectors should be orthogonal under the $\Sig$-induced metric, which makes offline
-merging and online continual learning two scheduling variants of the same objective.
-Third, it motivates Interference-Gated Functional Allocation (\IGFA), an online
-method that uses a low-rank summary of the occupied function subspace to decide
-whether a new update should be shared or orthogonalized
-(Fig.~\ref{fig:overview}).
+The paper makes three contributions.
+\begin{enumerate}[leftmargin=1.6em,itemsep=3pt]
+\item \textbf{Interference functional and removability.}
+Section~\ref{sec:theory} shows that forgetting is exactly the interference
+energy induced by a later update. The geometry of $\Sig_A$ penalizes only
+components in its active subspace, while updates in $\ker \Sig_A$ leave task
+$A$'s loss unchanged. This yields a structural criterion for lossless retention:
+interference is removable for disjoint task supports (reducing to ordinary
+orthogonality in isotropic geometry), whereas overlapping supports imply a
+non-zero distortion floor. The same quantity also admits an
+information-theoretic interpretation through the task-inference problem.
+
+\item \textbf{Optimal merging as $\Sig$-orthogonalization.}
+Section~\ref{sec:theory:merge} shows that post-merge loss decomposes into
+task-wise fit and cross-task interference. Minimizing this objective requires
+mutual $\Sig$-orthogonality of the task vectors, yielding the optimality
+condition for model merging and unifying offline merging and online continual
+learning as batch and incremental solutions to the same interference objective.
+
+\item \textbf{Interference-Gated Functional Allocation.}
+Section~\ref{sec:algo} introduces \IGFA, an online method motivated by the same
+functional. \IGFA{} is replay-free and Fisher-free, stores only a low-rank
+summary of the occupied function subspace, shares capacity when tasks are
+sufficiently aligned, and orthogonalizes updates only when interference is
+predicted (Fig.~\ref{fig:overview}).
+\end{enumerate}
 
 \begin{figure}[tb]\centering
 \includegraphics[width=\textwidth]{Subspace_Interference_and_Forgetting_Geometry}
 \caption{The task-induced geometry in feature space motivates either full sharing, full separation, or selective parameter sharing.
-\emph{Left (Disjoint).} When two tasks excite orthogonal feature subspaces, the
-update $\Del=\Del_\parallel+\Del_\perp$ splits into a component
-$\Del_\parallel\in\range\Sig_A$ across the iso-loss contours (the only part that
-costs forgetting) and $\Del_\perp\in\ker\Sig_A$ (interference-free); allocation is
-lossless. \emph{Centre (Overlapping).} When the supports share an active direction,
+\emph{Left (Disjoint).} When two tasks excite orthogonal feature subspaces,
+the update $\Del$ is composed of a component $\Del_\parallel\in\range\Sig_A$ between the iso-loss contours that incurs forgetting
+and $\Del_\perp\in\ker\Sig_A$ along the iso-loss contours where allocation is interference-free.
+\emph{Centre (Overlapping).} When the supports share an active direction,
 no update for $B$ can avoid $\range\Sig_A$ and a distortion floor is unavoidable.
 \emph{Right.} The same functional yields three update rules. Naive descent
 incurs the full interference (distorts old knowledge); orthogonal
@@ -183,26 +185,7 @@ state.}
 \label{fig:overview}
 \end{figure}
 
-The paper makes three contributions.
-\begin{enumerate}[leftmargin=1.6em,itemsep=3pt]
-\item \textbf{Interference functional and removability.} Section~\ref{sec:theory}
-shows that forgetting is exactly the interference energy induced by a later update.
-This yields a structural criterion for lossless retention and identifies the
-unavoidable distortion floor when task supports overlap. The same quantity admits an
-information-theoretic interpretation through the task-inference problem.
-\item \textbf{Optimal merging as $\Sig$-orthogonalization.}
-Section~\ref{sec:theory:merge} shows that post-merge loss decomposes into task-wise
-fit and cross-task interference. Minimizing this objective requires mutual
-$\Sig$-orthogonality of the task vectors, linking model merging and continual
-allocation under a common geometric principle.
-\item \textbf{Interference-Gated Functional Allocation.} Section~\ref{sec:algo}
-introduces \IGFA, a replay-free and Fisher-free online algorithm that stores only a
-low-rank subspace summary. Unlike unconditional orthogonal projection methods,
-\IGFA{} shares capacity when tasks are sufficiently aligned and orthogonalizes
-updates only when interference is predicted.
-\end{enumerate}
-
-All formal results are established in the linear-on-features regime. The experiments
+The experiments
 in Section~\ref{sec:exp} are designed to test the theory directly, including lossless
 allocation on disjoint supports, the relocation of unavoidable cost from forgetting
 into deferred plasticity, the similarity threshold at $\sstar\approx0.26$, and the
@@ -221,34 +204,35 @@ detailed in the Supporting Information.
 \section{Related work}
 \label{sec:related}
 
-\paragraph{Corrective continual learning.} Replay, regularization, and distillation
-remain the main corrective approaches to continual learning
-\cite{lopezpaz2017,chaudhry2019,buzzega2020,kirkpatrick2017,zenke2017,li2017lwf}.
-They are effective baselines, but they do not explicitly model interference through
-task geometry. In contrast, the interference functional derived below predicts the
-collision and identifies when it can be removed before it occurs; replay can be
+\paragraph{Corrective continual learning.} Replay \cite{lopezpaz2017,chaudhry2019,buzzega2020}, regularization \cite{kirkpatrick2017,zenke2017}, and distillation \cite{li2017lwf}
+remain the main corrective approaches to continual learning.
+They do not explicitly model interference through
+task geometry however, while the herein derived interference functional predicts the
+collision of the task updates and identifies when it can be removed before occuring. Replay can be
 viewed as a stochastic Monte-Carlo estimator of the same task second-moment $\Sig_t$
-that we summarize directly via a low-rank subspace.
+that we estimate sample-free via a low-rank subspace.
 
 \paragraph{Geometry- and gradient-based methods.} A related line of work controls the
 update direction itself. Orthogonal Gradient Descent \cite{farajtabar2020}, Gradient
 Projection Memory \cite{saha2021}, and Orthogonal Weight Modification
 \cite{zeng2019owm} project updates away from subspaces associated with previous
-tasks; in the present setting this corresponds to enforcing $\Del\in\ker\Sig_A$.
+tasks. Under a fixed-feature map, this corresponds to enforcing $\Del\in\ker\Sig_A$.
 PCGrad-style methods \cite{yu2020pcgrad} resolve conflicts through pairwise gradient
 comparisons rather than explicit task-subspace protection. Recent work also studies
 closely related regimes: Geodesic-Aligned Gradient Projection \cite{geodesic2025}
 addresses feature drift during sequential learning, and MINGLE \cite{mingle2025} uses
 a null-space criterion to gate low-rank experts during test-time merging. Relative to
 these approaches, the present framework derives the projection condition from an exact
-forgetting functional, replaces unconditional projection with a similarity-based
+forgetting functional, replaces unconditional projection with a similarity-gated
 share-or-orthogonalize rule, and uses the same functional to characterize both
 merging and the distortion floor. NTK-based analyses \cite{doan2021,bennani2020}
 likewise relate forgetting to overlap in representation space, but do not develop the
 $\Sig$-orthogonality criterion or the associated transfer gate.
 
-\paragraph{Model merging and task arithmetic.} A parallel literature merges
-independently fine-tuned models through arithmetic on weight-space task vectors
+\paragraph{Model merging and task arithmetic.} In a parallel line of literature,
+independently fine-tuned are
+combined into a single model that retains useful knowledge from each task
+through arithmetic on weight-space task vectors
 \cite{ilharco2023,yadav2023}. These methods usually operate in Euclidean parameter
 space, whereas the present analysis identifies the task-dependent metric induced by
 $\Sig_t$ as the relevant geometry. Under this metric, optimal merging becomes mutual
@@ -258,7 +242,7 @@ by whitening singular directions of task vectors; by contrast, isotropic merging
 \cite{marczak2025iso} shows that shared-subspace isotropy can outperform strict
 orthogonalization. WUDI-Merging \cite{cheng2025wudi} is particularly close in spirit
 because it links task vectors to input subspaces and minimizes interference without
-data; the key difference here is that the metric and residual are \emph{derived} from
+data; the key difference in our work is that the metric and residual are \emph{derived} from
 an exact forgetting functional rather than an approximate subspace argument.
 Tangent-space continual merging \cite{holistic2026} also operates in a first-order
 regime, but with similar trade-offs between scalability and functional specificity.
@@ -271,17 +255,17 @@ given or must be inferred. In this context, the distortion floor developed later
 provides a quantitative link between support overlap and task inference. Related
 empirical and analytical work has examined the effects of scale and pretraining
 \cite{ramasesh2022}, frozen-backbone prompt and adapter methods
-\cite{wang2022l2p,wang2022dualprompt,smith2023coda}---which learn prompt pools with
+\cite{wang2022l2p,wang2022dualprompt,smith2023coda}, which learn prompt pools with
 input-conditioned selection under a class-incremental protocol and provide strong empirical
 accuracy without structural retention guarantees (differentiated in
-Sec.~\ref{sec:exp:cifar})---forgetting in linear models
+Sec.~\ref{sec:exp:cifar}), forgetting in linear models
 \cite{evron2022}, plasticity loss \cite{dohare2024}, and convergence or task ordering
 in continual linear classification \cite{jung2025,lihiratani2025}.
 
 % =====================================================================
 \section{Preliminaries: the interference functional}
 \label{sec:theory}
-This section fixes the setting and assumptions (Sec.~\ref{sec:theory:setup}), derives the
+This section specifies the setting and assumptions (Sec.~\ref{sec:theory:setup}), derives the
 interference functional and the removability dichotomy (Sec.~\ref{sec:theory:functional}),
 generalizes the identity beyond frozen features (Sec.~\ref{sec:theory:general}), and derives
 the optimal merge together with the distortion floor (Sec.~\ref{sec:theory:merge}).
@@ -308,11 +292,14 @@ second moment, and let $w_t^\ast$ be a realizable optimum. The per-task excess l
 L_t(w)=\tfrac12\,(w-w_t^\ast)^\top\Sig_t\,(w-w_t^\ast)\;\ge 0.
 \label{eq:excess}
 \end{equation}
-Equation~\eqref{eq:excess} is exactly the excess population risk under squared loss.
-Writing $y=\phi(x)^\top w_t^\ast+\varepsilon$ with $\mathbb{E}[\varepsilon]=0$ and
-$\varepsilon\!\perp\!\phi(x)$ gives $\mathbb{E}[(\hat y-y)^2]/2=L_t(w)+\tfrac12
-\mathbb{E}[\varepsilon^2]$, so all loss differences below depend only on $L_t(w)$. Three
-assumptions fix the regime: \textbf{(A1) frozen features}---$\phi$ is fixed during training,
+Under squared loss, this coincides with the excess population risk.
+We write the target as $y=\phi(x)^\top w_t^\ast+\varepsilon$ to separate the predictable linear component
+from the irreducible residual variation. With $y=\phi(x)^\top w_t^\ast+\varepsilon$, $\mathbb{E}[\varepsilon]=0$, and
+$\varepsilon\!\perp\!\phi(x)$, the squared risk satisfies $\mathbb{E}[(\hat y-y)^2]/2=L_t(w)+\tfrac12
+\mathbb{E}[\varepsilon^2]$, so all subsequent loss differences depend only on $L_t(w)$.
+
+Three
+assumptions define this regime: \textbf{(A1) frozen features}---$\phi$ is fixed during training,
 exact for frozen-backbone and PEFT settings and the first-order NTK \cite{jacot2018} model of
 end-to-end training, so full-network claims are first-order and are tested in
 Sec.~\ref{sec:exp:breakdown}; \textbf{(A2) realizability}---each $w_t^\ast$ attains zero
@@ -377,8 +364,7 @@ Here, ``task support'' refers to the column space $\range\Sig_t$, that is, the
 subspace of feature directions activated by task $t$. Disjoint supports therefore mean
 orthogonal feature subspaces, not disjoint label sets.
 
-\paragraph{Relation to standard continual-learning metrics.} The functional is not a
-replacement for the familiar measures but an account of what they measure. Under squared
+\paragraph{Relation to standard continual-learning metrics.} Under squared
 loss the per-task term $\Del L_A=\tfrac12\Del^\top\Sig_A\Del$ is exactly the per-task
 summand of the Forgetting Measure and the negative of Backward Transfer; positive
 backward transfer is simply $\Del L_A<0$, which the signed gate permits and unconditional
@@ -391,7 +377,7 @@ benchmark metrics and bounds them.
 \label{sec:theory:general}
 Theorem~\ref{thm:functional} assumes frozen features. In end-to-end training, feature
 drift degrades the frozen-curvature prediction, especially in deeper networks and at
-larger step sizes. The correct generalization is to replace $\Sig_A$ by the curvature
+larger step sizes. The natural generalization is to replace $\Sig_A$ by the curvature
 of $L_A$ averaged along the displacement from $w_A$ to $w_B$.
 
 \begin{theorem}[Architecture-general forgetting identity]
@@ -408,20 +394,21 @@ where $\bar H_A$ is the Hessian of $L_A$ averaged along the segment $w_A\!\to\!w
 $w_A$ is a stationary point, then $\nabla L_A(w_A)=0$ and
 $\Del L_A=\tfrac12\Del^\top\bar H_A\Del$.
 \end{theorem}
-\noindent\emph{Intuition:} a second-order Taylor expansion of $L_A$ along the segment
+\noindent\emph{Intuitively}, a second-order Taylor expansion of $L_A$ along the segment
 $w_A\!\to\!w_B$, with exact integral remainder, produces the gradient term and the
 path-averaged Hessian (full derivation in Sec.~\ref{si:proofs}).
 
-\noindent Theorem~\ref{thm:functional} is the constant-curvature special case: if
-$\nabla^2 L_A\equiv\Sig_A$ then $\bar H_A=\Sig_A$. For squared loss,
+\noindent In the constant-curvate case $\nabla^2 L_A\equiv\Sig_A$, the path-averaged Hessian $\bar H_A$
+collapses to the fixed-curvature matrix $\Sig_A$ by Theorem~\ref{thm:functional}.
+For squared loss,
 $\nabla^2 L_A(w)=\mathbb{E}_{\mathcal D_A}[J_w J_w^\top]+R(w)$, so $\bar H_A$ is a
 path-averaged Gauss--Newton geometry, where $J_w=\partial f(x;w)/\partial w$ is the
 parameter Jacobian and $R(w)$ is a residual-curvature term (Fig.~\ref{fig:thmgeom}b).
 The removability, merging, and floor results therefore extend by replacing $\Sig_A$
 with $\bar H_A$. In practice, $\bar H_A$ can be estimated from a small number of
-evaluations of $L_A$ along the segment, without forming the Hessian explicitly. The
-same prescription tells \IGFA{} what to track under drift: the running Gauss--Newton
-subspace $\mathbb{E}[J_w J_w^\top]$ rather than a stale $\Sig_A$.
+evaluations of $L_A$ along the segment, without forming the Hessian explicitly. This principle motivates
+ \IGFA{}  to track the running Gauss--Newton
+subspace $\mathbb{E}[J_w J_w^\top]$.
 
 The generalization in fact reaches its cleanest form not in parameter space but in
 \emph{function} space, where the geometry is exact for arbitrary architectures.
@@ -437,12 +424,12 @@ D_A}(f(x)-y)^2$. Writing $\Del\!f=f_B-f_A$ and $r_A=f_A-y$,
 \label{eq:funcspace-main}
 \end{equation}
 If $A$ is realizable and trained to convergence ($r_A=0$), forgetting equals the
-function-space interference energy $\tfrac12\|\Del\!f\|_{L^2(\mathcal D_A)}^2$; learning
+function-space interference energy $\tfrac12\|\Del\!f\|_{L^2(\mathcal D_A)}^2$. Learning
 $B$ is lossless iff $\Del\!f=0$ on $\mathrm{supp}\,\mathcal D_A$; and if the training
 velocity stays in the kernel of the current Gauss--Newton metric, $L_A$ is conserved
 exactly in continuous time.
 \end{theorem}
-\noindent Theorem~\ref{thm:functional} is the linear shadow of
+\noindent Theorem~\ref{thm:functional} is the linearized version of
 Eq.~\eqref{eq:funcspace-main}: under A1, $\Del\!f=\Del^\top\phi$ recovers
 $\tfrac12\Del^\top\Sig_A\Del$. The dichotomy, the distortion floor
 (Sec.~\ref{sec:theory:merge}), and the retention guarantee thus hold with A1 removed
@@ -469,11 +456,11 @@ diffusion law $\mathbb{E}[\Del L_A]=\tfrac12\eta^2\sigma^2 t\,r\sin^2\epsilon+o(
 vanishing as $\epsilon\to0$.
 \end{proposition}
 \noindent The method is therefore a \emph{controlled} approximation of the exact
-identity, not a heuristic: retention loss is governed by a single measurable
-quantity---the basis error $\epsilon$---which the recursive tracker drives down and the
-drift velocity monitors (validated in \texttt{evaluate\_upgrades.py}; the law inverts to
-a retention-aware step-size bound, Sec.~\ref{si:memory}). This isolates the two residual
-gaps for end-to-end deployment as basis error and finite step size, both quantified.
+identity with the retention loss governed by a single measurable
+quantity (basis error $\epsilon$), which the recursive tracker drives down and the
+drift velocity monitors (validated in \texttt{evaluate\_upgrades.py}. This law inverts to
+a retention-aware step-size bound, Sec.~\ref{si:memory}) and isolates the two residual
+gaps for end-to-end deployment as quantified basis error and finite step size.
 
 \subsection{Optimal Merging and the Distortion Floor}
 \label{sec:theory:merge}
@@ -512,16 +499,16 @@ the two-task case.
 \end{proof}
 
 \noindent The relevant inner product for merging is therefore the task-dependent
-$\Sig_t$-metric rather than the Euclidean metric of parameter space
+$\Sig_t$-metric
 (Fig.~\ref{fig:thmgeom}c); Euclidean orthogonality is the white-feature special case
 $\Sig_t\propto I$. The same residual $\mathcal{D}$ also governs the online
 continual-learning setting, so merging and continual learning optimize the same
-functional on different schedules.
+functional under batch and streaming schedules.
 
-\paragraph{When orthogonality fails: the distortion floor.}\label{sec:theory:ceiling}
+\paragraph{Residual distortion under non-orthogonal task geometry.}\label{sec:theory:ceiling}
 Optimal merging requires $\Sig$-orthogonality; when the supports force it to fail, the
-residual $\mathcal{D}$ of Theorem~\ref{thm:merge} does not vanish, and it has a
-task-inference reading. Consider two tasks as a single problem in which each input carries a
+residual $\mathcal{D}$ of Theorem~\ref{thm:merge} quantifies the unavoidable error caused
+by taks ambiguity. Consider two tasks as a single problem in which each input carries a
 hidden label $T\in\{A,B\}$, and a shared head must predict the task-appropriate target.
 
 \begin{figure}[tb]\centering
@@ -537,7 +524,7 @@ controlled by the conditional entropy $H(T\!\mid\!\phi)$ (Theorem~\ref{thm:mi}; 
 \label{fig:thmfloor}
 \end{figure}
 
-\begin{theorem}[Distortion floor and inference obstruction]
+\begin{theorem}[Distortion floor and inference limit]
 \label{thm:floor}
 Suppose the tasks share an active direction $u$, with $\|u\|=1$ and
 $u\in\range\Sig_A\cap\range\Sig_B$, and let $\delta=u^\top(w_B^\ast-w_A^\ast)$. Then
@@ -552,12 +539,12 @@ restricted to the shared active subspace $S=\range\Sig_A\cap\range\Sig_B$. On th
 shared support, the excess Bayes risk of the Bayes-optimal single head over the task
 oracle equals the merge residual.
 \end{theorem}
-\noindent\emph{Intuition:} restricting the merge to the shared direction $u$ reduces it to a
+\noindent  Restricting the merge to the shared direction $u$ reduces it to a
 scalar two-point problem whose $\Sig$-weighted optimum leaves residual
 $\tfrac14\sigma_u\delta^2$; summing over shared directions and identifying the Bayes single
 head with the posterior mean gives the bound and the inference claim (Sec.~\ref{si:proofs}).
 
-\noindent Support overlap is therefore the common obstruction to both
+\noindent Support overlap is therefore the common limit to both
 $\Sig$-orthogonal merging and task inference; a positive floor appears only on shared
 active directions where the tasks also disagree. This yields the geometric counterpart
 of the task- versus class-incremental distinction \cite{vandeven2022}: disjoint
@@ -591,7 +578,7 @@ label is fully identifiable, $I(T;\phi)=H(T)$. The merge floor of
 Theorem~\ref{thm:merge} is the linear-head restriction, so
 $\mathcal{D}^\star\le\mathcal{D}_{\mathrm{merge}}$, with equality at both extremes.
 \end{theorem}
-\noindent\emph{Intuition:} the law of total variance splits the Bayes single-head risk into
+\noindent The law of total variance splits the Bayes single-head risk into
 the oracle noise plus the posterior-variance-weighted target gap
 $\eta(1-\eta)(\phi^\top\delta)^2$, giving Eq.~\eqref{eq:mi-identity}; the entropy sandwich
 follows from the pointwise bound $\tfrac14 h_b(p)^2\le p(1-p)\le\tfrac12 h_b(p)$
@@ -650,7 +637,7 @@ when full---rate--distortion-graceful forgetting.
 Because the old-task function is first-order invariant along orthogonalized directions,
 retention is structural rather than penalty-based. Because aligned directions are
 shared rather than suppressed, transfer is preserved, which unconditional projection
-removes. Algorithm~1 states the procedure precisely.
+removes (see Algorithm~1).
 
 \begin{figure}[tb]\centering
 \fbox{\begin{minipage}{0.95\textwidth}\small
@@ -695,10 +682,8 @@ subspaces are protected, recovers orthogonal projection \cite{farajtabar2020,sah
 exactly. \IGFA{} is therefore a strict generalization: it preserves the protective
 behavior of \OGD{}/\textsc{gpm} in the conflict regime, but restores sharing when tasks
 are aligned. Offline, applying the same primitive to a batch of pre-trained task
-vectors yields the $\Sig$-orthogonal merge of Theorem~\ref{thm:merge}. The offline and
-online methods are thus the same primitive executed on two different schedules. The
-threshold $\sstar$ itself need not be hand-set: a validation-greedy rule recovers the
-break-even similarity online (Sec.~\ref{si:sstar}).
+vectors yields the $\Sig$-orthogonal merge of Theorem~\ref{thm:merge}. Online, the
+threshold $\sstar$ is recovered by a validation-greedy rule (Sec.~\ref{si:sstar}).
 
 \paragraph{Why a shared head with a gate, not one head per task.} The simplest way to
 avoid interference is to assign each task its own head and never share. Strict
@@ -724,7 +709,7 @@ subspace treats drifted copies of the same direction as new ones, so its rank ke
 growing until it fills the parameter space, whereas the recursive estimate recognizes
 them as one low-rank subspace and stays bounded (Sec.~\ref{sec:exp:drift}). This is the same
 failure mode reported for subspace-projection merging in large language models
-\cite{merging2025llm}, and the recursive Gauss--Newton update is the proposed remedy.
+\cite{merging2025llm}, and the proposed solution is the recursive Gauss--Newton update.
 
 \paragraph{Regimes.} \IGFA{} instantiates naturally in three deployment settings:
 (i) \emph{from scratch}, acting on the full parameter matrix; (ii) \emph{frozen-backbone
@@ -743,7 +728,7 @@ share, which the signed gate grants and unconditional projection forfeits.
 the only decision is where its cost lands: forgetting (naive), deferred fit (projection),
 or stored data (replay). \emph{Cumulative rank near capacity} $\Rightarrow$ add capacity,
 replay, or graceful overwriting. The gate's marginal value over projection is organized by
-the stream's share density and is significant precisely where overlaps straddle the
+the stream's share density and is significant where overlaps straddle the
 threshold (Sec.~\ref{sec:exp:cifar}). Two operating assumptions bound this framing and are
 made explicit here rather than deferred: task boundaries are treated as known (relaxed by
 the recursive tracker and the velocity detector of Sec.~\ref{si:extensions}), and for
@@ -825,13 +810,13 @@ function of target similarity $s$ (Fig.~\ref{fig:simcap}, left). Sharing wins by
 variance reduction when tasks are similar and loses by bias when they are not, with the
 net benefit crossing zero at $\sstar\approx0.26$; above this threshold the gate should
 share, below it orthogonalize. With exact, full data the two strategies are an exact
-relocation of the same cost, so this sign-change is a finite-data effect; it is the
-quantity that unconditional projection methods forgo.
+relocation of the same cost, so this sign-change is a finite-data effect
+that unconditional projection methods forgo.
 Separately, under orthogonal allocation a stream of rank-$2$ tasks exhibits a sharp
-capacity knee at $T=d/r$ (Fig.~\ref{fig:simcap}, right): earlier tasks remain intact,
+capacity knee at $T=d/r$ (Fig.~\ref{fig:simcap}, right) at which earlier tasks remain intact,
 but once the occupied rank exceeds capacity, residual distortion turns on where
-the theory predicts. Capacity is thus a rate--distortion budget, and the rank cap
-$k_{\max}$ of Algorithm~1 is its operational form: trading $d$ against the number of
+predicted. Capacity is thus a rate--distortion budget (the rank cap
+$k_{\max}$ of Algorithm~1 is its operational form). Trading $d$ against the number of
 tasks is an effective-capacity budget, and dropping the least-excited direction bounds
 the induced forgetting by its eigenvalue.
 
@@ -852,7 +837,7 @@ floor (the $d=40$ stream ends before its knee at $T=20$).}
 \subsection{Curvature drift and the segment-averaged correction}
 \label{sec:exp:breakdown}
 Theorem~\ref{thm:functional} is exact under frozen features, but in jointly trained
-networks its frozen-curvature prediction degrades with depth: the shallow network holds
+networks its frozen-curvature prediction degrades with depth. The shallow network holds
 Pearson $r\approx0.93$--$0.95$ up to moderate step sizes, whereas deeper networks are
 markedly less predictable, with $r$ falling to $\approx0.2$--$0.4$
 (Fig.~\ref{fig:breakdown}, top). Replacing the
@@ -860,8 +845,7 @@ initial curvature by the segment-averaged curvature of Theorem~\ref{thm:general}
 this failure mode: in the same regime, the corrected predictor restores $r=1.00$ at
 every tested depth (Fig.~\ref{fig:breakdown}, bottom), estimated from forward
 evaluations of $L_A$ along the segment $w_A\!\to\!w_B$ with no explicit Hessian. The
-correction is also low-cost: estimating it from $K=21$ probe evaluations costs about
-$1.4\%$ of one task's training budget, and $K=5$ already suffices in practice for under
+correction from $K=21$ probe evaluations consumes $1.4\%$ of one task's training budget, and $K=5$ already suffices in practice for under
 $0.4\%$. Once the stale curvature is corrected, the architecture-general identity holds
 exactly.
 
@@ -883,7 +867,7 @@ frozen-curvature predictor (red) remains imperfect ($r=0.77$--$0.87$).}
 \label{sec:exp:real}
 We evaluate the functional and \IGFA{} on real benchmarks built on frozen
 random-feature backbones, so that Assumption A1 and hence Theorem~\ref{thm:functional}
-hold exactly while the tasks remain nontrivial. For \textbf{Split-Digits}, we construct
+hold exactly while the tasks remain non-trivial. For \textbf{Split-Digits}, we construct
 a task-incremental benchmark from the \texttt{digits} dataset ($1797$ images, $10$
 classes), split into five two-class tasks on top of a frozen random ReLU feature map
 ($d=300$). The functional predicts per-task forgetting across the full task sequence
@@ -1114,8 +1098,8 @@ to $0$ (cannot learn new tasks) while the recursive one retains $\approx0.93$.}
 \section{Discussion}
 \label{sec:discussion}
 
-A single exact identity, Eq.~\eqref{eq:functional}, reorganizes the continual-learning
-problem around geometry. Forgetting is recast as an interference energy with an explicit geometry: components in $\range\Sig_A$ incur forgetting, whereas components in $\ker\Sig_A$ are free.
+The identity $\Del L_A=\tfrac12\,\Del^\top\Sig_A\,\Del$ (Eq.~\eqref{eq:functional}) reorganizes the continual-learning
+problem around geometry.Components in $\range\Sig_A$ incur forgetting, whereas components in $\ker\Sig_A$ are free.
 This perspective determines, before training begins, whether two tasks must interfere at all, what
 irreducible floor remains when they do, and which inner product renders model merging
 optimal---replacing the Euclidean metric with the $\Sig$-metric. In that
@@ -1123,8 +1107,8 @@ sense, the functional plays the same conceptual role here that the NTK \cite{jac
 played for generalization: it provides a geometry and a set of computable quantities in
 place of heuristics.
 
-\paragraph{A map of the claims.} The results span four evidential tiers, and we label them
-so the strongest are not read as the broadest. \emph{(I) Exact.} In frozen-feature/PEFT
+\paragraph{A map of the claims.} The results span four evidential tiers.
+\emph{(I) Exact.} In frozen-feature/PEFT
 settings (A1) and, architecture-free, in function space
 (Theorem~\ref{thm:funcspace}): the interference identity, the removability dichotomy, the
 $\Sig$-orthogonal optimal merge, the distortion floor, and continuous-time exact
@@ -1138,10 +1122,9 @@ the frozen-ViT streams, and the threshold-free gate's real-text gain over naive
 fine-tuning---which are measured, not proved. \emph{(IV) Mechanism probes and
 conjectures.} The generality extensions (federated merging, out-of-distribution and
 task-free signals, physics-informed constraints, Fisher-metric policy gradients,
-meta-learning, memory-and-control instances), each an exact-regime proof-of-concept
+meta-learning, memory-and-control instances) are exact-regime proof-of-concepts
 labelled in the Supporting Information as \emph{proved-in-A1}, \emph{empirical mechanism
-probe}, or \emph{forward-looking conjecture}, so that scope of ambition never inflates
-scope of proof.
+probe}, or \emph{forward-looking conjecture}.
 
 \paragraph{Forgetting decomposes into incompatibility, capacity, and control.} The
 results above assemble into an attribution identity. Writing $\mathcal{D}^\star_\infty$
@@ -1151,19 +1134,19 @@ the \emph{deployed} class (width, rank, architecture), and $L$ for what training
 achieved, every observed forgetting level splits exactly, term by non-negative term,
 into $L=\mathcal{D}^\star_\infty+[\mathcal{D}^\star_{\mathrm{class}}-\mathcal{D}^\star_\infty]
 +[L-\mathcal{D}^\star_{\mathrm{class}}]$: \emph{incompatibility}, a property of the task
-family that no gate, replay, or width removes; \emph{capacity}, a property of the model
-class that only widening or routing removes; and \emph{control}, a property of the
+family that no gate, replay, or width removes. \emph{Capacity} is a property of the model
+class that only widening or routing removes and \emph{control} a property of the
 training policy that only a better gate, replay schedule, or ordering removes. In the
-exact regime each intervention moves only its own term---widening eliminates the
-capacity term while no policy touches it, the active-set gate cuts the control term
+exact regime each intervention moves only its own term. Widening eliminates the
+capacity term while no policy touches it and the active-set gate cuts the control term
 while the floor is invariant throughout (Sec.~\ref{si:beyond}). The practical
 consequence is a diagnosis rule that precedes every method choice in this paper's
-taxonomy: measure which term dominates---floor from the data, class optimum from the
-deployed geometry, control as the remainder---\emph{before} buying a cure, because each
+taxonomy: measure which term dominates (floor from the data, class optimum from the
+deployed geometry, control as the remainder) \emph{before} deciding on a mechanism, because each
 family of continual-learning methods can repair exactly one of the three. A further
 split follows from the identity's anchor: evaluated on the deployment rather than the
 training distribution, forgetting separates into knowledge loss and memorization loss,
-and the two can carry opposite signs---an interfering update can raise train loss while
+and the two can carry opposite signs. An interfering update can raise train loss while
 \emph{improving} the deployed function, so part of what benchmarks report as
 catastrophic forgetting is implicit unlearning of noise. Protection must therefore
 anchor on validated data: a gate fed training gradients defends memorized noise as if
@@ -1175,16 +1158,13 @@ practical deployments now occupy, it is exact and the results stand without
 approximation, as the real-data identity at $r=0.999$ confirms. For full networks it is
 first-order, and the paper measures how that approximation degrades: the
 prediction remains accurate for shallow, small-step training and falls to
-$r\approx0.2$--$0.4$ for deeper networks. The paper therefore claims exactness only where A1 holds
-and reports the approximation envelope for full end-to-end networks, where the feature map
-drifts and the identity becomes first-order (Sec.~\ref{sec:exp:breakdown}). The same
-caution applies algorithmically: allocation does not eliminate the floor, but only redistributes its cost.
-Task ordering does not reduce the floor either: because the floor is a property of the joint support
-overlap, it is essentially invariant to task order (a $\Sig$-overlap curriculum did not lower it
-in our tests, Sec.~\ref{si:extensions}), which reinforces that allocation relocates cost
-rather than removing it.
+$r\approx0.2$--$0.4$ for deeper networks (identity becomes first-order, Sec.~\ref{sec:exp:breakdown}).
+Allocation does not eliminate the floor, but only redistributes its cost.
+Task ordering does not reduce the floor either because the floor is a property of the joint support
+overlap. It is essentially invariant to task order (a $\Sig$-overlap curriculum did not lower it
+in our tests, Sec.~\ref{si:extensions}), which reinforces that allocation only relocates cost.
 Against unconstrained replay, which can reduce the floor by re-supplying $\Sig_A$, the
-defensible claim is therefore not universal superiority, but parity under no-buffer or
+claim is therefore parity under no-buffer or
 no-Fisher constraints together with structural guarantees and preserved transfer where
 similarity permits. On the benchmark, \IGFA{} matches the best structural baseline because
 the tasks are dissimilar; its distinctive sharing gain requires task similarity, isolated
@@ -1195,9 +1175,9 @@ The geometry also yields an operational decision procedure. Before training, a l
 task-probe on the frozen features estimates task separability (Sec.~\ref{si:feasibility});
 pairwise subspace overlap and target similarity then classify the stream. Disjoint supports
 make structural allocation lossless, so neither replay nor a Fisher penalty is needed.
-Overlapping supports with aligned targets favor sharing, which the gate grants. Overlapping
-supports with conflicting targets carry an irreducible floor, and the only remaining decision
-is where its cost lands: on the old task as forgetting, on the new task as deferred fit, or
+Overlapping supports with aligned targets favor sharing via gate. Overlapping
+supports with conflicting targets carry an irreducible floor, which poses the question
+of where to assign its cost: on the old task as forgetting, on the new task as deferred fit, or
 on the memory budget as stored data for replay. The capacity budget adds the final
 constraint: once the cumulative occupied rank approaches the feature dimension, retention
 must be paid for with added capacity, replay, or graceful overwriting. Each branch of this
@@ -1205,10 +1185,10 @@ procedure is measurable from features and subspaces before or during training, r
 diagnosed after a failure.
 
 A recent broad evaluation reports that subspace-projection merging works well on small
-classifiers but degrades on large language models \cite{merging2025llm}. The present
-framework explains both outcomes. On small classifiers the feature geometry is nearly
-static, so a subspace fixed once remains a good metric and projection succeeds; this is
-precisely the frozen regime in which Theorem~\ref{thm:functional} is exact. Large
+classifiers but degrades on large language models \cite{merging2025llm}.
+On small classifiers the feature geometry is nearly
+static, so a subspace fixed once remains a good metric and projection succeeds, which is
+precisely the frozen regime where Theorem~\ref{thm:functional} is exact. Large
 language models, by contrast, have highly entangled representations that drift as
 parameters move, so projection against a stale geometry accumulates misaligned
 constraints, exhausts capacity, and eventually damages the representation itself. A
@@ -1284,7 +1264,7 @@ removes the bookkeeping already appears in this paper. The recursive Gauss--Newt
 replaces per-task second moments with a decayed running estimate, the subspace-velocity
 detector recovers unknown boundaries at recall and precision $1.00$ on clean streams, and
 their fully autonomous composition matches the oracle given the true boundaries
-(Sec.~\ref{si:extensions}). Gradual rather than abrupt transitions are the harder case;
+(Sec.~\ref{si:extensions}). Gradual transitions are the harder case;
 there the boundary concept itself blurs, and the drift experiments of
 Sec.~\ref{sec:exp:drift} show that the running estimate simply tracks the moving geometry
 without requiring a boundary at all.
@@ -1550,9 +1530,10 @@ geometric form of an effective-capacity budget $N+\kappa M$ (parameters plus a p
 memory worth), where $\kappa$ is the rank a stored direction occupies---the right panel of
 Fig.~\ref{fig:simcap} confirms the knee location across feature dimensions.
 
-\paragraph{The floor is a conserved quantity with exchange rates.} In the exact regime the
-distortion floor behaves as a conserved bill that method families pay in different
-currencies (\texttt{evaluate\_open\_questions\_new.py}, $48$ seeds). Relocation is exactly
+\paragraph{The floor is a fixed cost with method-dependent allocation.} In the exact regime the
+distortion floor  is not removed by the method choice but redistributed across forgetting, deferred fit,
+or merge residual (\texttt{evaluate\_open\_questions\_new.py}, $48$ seeds).
+Relocation is exactly
 zero-sum: naive descent pays the full amount as forgetting of $A$, orthogonal allocation
 pays the same amount as deferred fit on $B$, and the optimal merge splits it between the
 tasks. Only added conflict-free capacity reduces the bill, linearly at rate
@@ -1678,8 +1659,7 @@ projection (and its recursive Gauss--Newton tracking) carries over and provides 
 Fisher-free retention; a gate that succeeds on \emph{similar} language tasks remains an open
 problem.
 
-\paragraph{A candidate similarity signal for text.} The failure above is a signal problem,
-not a mechanism problem: input-subspace overlap is uninformative when all domains share
+\paragraph{A candidate similarity signal for text.} The failure above is a signal problem: input-subspace overlap is uninformative when all domains share
 low-level structure. An exact-regime study of precisely this confound---input overlap fixed
 at $1.0$ while target similarity varies (\texttt{evaluate\_next\_steps.py})---shows that a
 \emph{probe} signal, a few-shot head fit on the incoming task compared to the stored head by
@@ -1692,7 +1672,7 @@ problem; but it requires no extra state and is modality-agnostic, because it rea
 functional instead of the input geometry.
 
 \paragraph{The language gate, resolved in function space.} The function-space formalism
-(Sec.~\ref{si:beyond}) dissolves the problem rather than patching it: the gate should
+(Sec.~\ref{si:beyond}) dissolves the problem: the gate should
 never have read input geometry at all. The correct, modality-free signal is the
 \emph{interference rate} $\langle\nabla L_u,g\rangle$ of the new update $g$ against each
 stored domain $u$---a quantity that includes the targets, which is precisely what input
@@ -1762,15 +1742,28 @@ gate; three seeds) yields the strongest language result in this paper: final los
 $3.536\pm0.005$ and forgetting $+0.206\pm0.005$, improving on naive
 ($3.625$/$+0.324$), unconditional protection ($3.617$/$+0.319$), and the sampled sign
 gate ($3.605$/$+0.300$) on \emph{both} axes simultaneously---a $36\%$ reduction in
-forgetting relative to naive together with the best adaptation of any arm. Every
-pairwise gap exceeds fourteen standard errors (conservative unpaired Welch tests from
-the summary statistics give $p\le5\times10^{-4}$ throughout; the per-seed records of
-this session were lost before archiving, so exact paired tests are pending, and the
-naive arm reproduces the preceding session's values within one standard deviation). The
-sampled gate's modest margins were therefore under-enforcement of the monotone-retention
-QP, as the exact-regime analysis predicted; whether the same repair closes the
-dense-conflict vision gap is a committed prediction, not yet run
-(\texttt{kaggle\_sign\_gate\_vit.py}, \texttt{func-active} arm).
+forgetting relative to naive together with the best adaptation of any arm. An
+independent re-run with archived per-seed records reproduces the result across sessions
+($3.540\pm0.006$/$+0.208\pm0.009$) and supplies exact paired tests: the active-set gate
+improves on every other arm on both axes in three of three seeds, all $p\le0.024$
+(versus the sampled gate $p=0.023$/$0.012$; versus unconditional protection
+$p=0.0009$/$0.0008$; versus naive $p=0.0027$/$0.0036$). The same re-run is a caution on
+the \emph{sampled} gate: its edge over naive is session-fragile there
+($p=0.08$--$0.17$), so the robust finding at scale is the active set's dominance, not
+the single-probe margin. The sampled gate's modest margins were therefore
+under-enforcement of the monotone-retention QP, as the exact-regime analysis predicted.
+The committed vision prediction was then run (\texttt{kaggle\_sign\_gate\_vit.py},
+\texttt{func-active} arm, five seeds) and is adjudicated as follows. On the three
+masked task-incremental streams the active-set gate is \emph{exactly} inert---bitwise
+equal to naive, as the theory requires---retaining the accuracy advantage over the
+subspace gates ($p\le0.046$). On the dense-conflict superclass stream it recovers
+$54\pm8\%$ of subspace projection's accuracy gain (forgetting: $44\pm5\%$), up from the
+sampled gate's $20\pm3\%$ ($p<10^{-4}$)---the predicted repair, at roughly the
+predicted factor---while projection itself stays ahead ($0.788$ versus $0.767$,
+$p=0.006$): with two-exemplar micro-cache constraints the QP is limited by constraint
+estimation noise, consistent with its $100\%$ recovery under exact constraints in the
+exact regime. Dense conflict with weak constraint estimates therefore still belongs to
+subspace projection, and the scoping conclusion above stands with the gap halved.
 
 Running the earlier probe protocol on real text (GPT-2, sequential LoRA on four AG-News
 topic domains, three seeds; \texttt{kaggle\_probe\_gate\_llm.py},
@@ -1873,8 +1866,8 @@ When the rank cap $k_{\max}$ binds, \IGFA{} overwrites the smallest-eigenvalue o
 direction. Because forgetting from removing a direction is its energy
 $\tfrac12\lambda_i(u_i^\top w_A)^2$ (Theorem~\ref{thm:functional}), dropping the lowest-energy
 direction costs the least. Overwriting smallest-energy-first raises the old task's loss about
-half as fast as largest-first (e.g. $2.0$ vs $4.3$ at the half-way point), a gradual
-rather than abrupt degradation (Fig.~\ref{fig:graceful}). In modern backbones, where a
+half as fast as largest-first (e.g. $2.0$ vs $4.3$ at the half-way point) in a gradual
+degradation (Fig.~\ref{fig:graceful}). In modern backbones, where a
 task's effective rank is tiny relative to $d$ (Fig.~\ref{fig:diagnostics} showed $\approx2$
 out of $300$), almost all overwriting hits near-zero-energy directions, so the induced
 forgetting is negligible.
@@ -2139,7 +2132,7 @@ need for gating, so representation learning and structural allocation address th
 distortion floor.
 
 \paragraph{Certified unlearning is the dichotomy inverted.} Removability read backwards is
-an unlearning certificate. Projecting a trained model's update off $\range\Sig_F$ of a
+a geometric feasibility criterion. Projecting a trained model's update off $\range\Sig_F$ of a
 forget set removes that set's influence exactly when forget and retain supports are
 disjoint: held-out forget-set loss rises to the untrained level while retain-set
 performance is untouched. When the supports share $k$ directions the removal is
