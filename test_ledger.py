@@ -2,7 +2,8 @@
 import numpy as np
 from interference_ledger import (GeometryTracker, InterferenceLedger,
                                   InterferenceController, principal_overlap,
-                                  kl_interference, jsd_floor)
+                                  kl_interference, jsd_floor, qp_gate,
+                                  constraints_from_tasks)
 
 rg = np.random.default_rng(0)
 def orth(d, r): return np.linalg.qr(rg.standard_normal((d, r)))[0]
@@ -71,6 +72,19 @@ def test_bregman_helpers():
     d1, d2 = rg.uniform(0.5, 2, 40), rg.uniform(0.5, 2, 40)
     assert jsd_floor(p, p, d1, d2) < 1e-12
     assert jsd_floor(p, q, d1, d2) > 0
+
+def test_qp_gate_recovers_all_methods():
+    r = np.random.default_rng(3)
+    u = r.standard_normal(30)
+    assert np.allclose(qp_gate(u), u)                       # naive
+    g = r.standard_normal(30); g = g if u @ g > 0 else -g
+    v = u - (u @ g) / (g @ g) * g                           # sign gate closed form
+    assert np.allclose(qp_gate(u, G=g[:, None]), v, atol=1e-12)
+    Q = np.linalg.qr(r.standard_normal((30, 6)))[0]
+    assert np.allclose(qp_gate(u, G_eq=Q), u - Q @ (Q.T @ u), atol=1e-12)  # OGD
+    B1, B2 = Q[:, :3], np.linalg.qr(r.standard_normal((30, 3)))[0]
+    E = constraints_from_tasks([B1, B2], B_new=B1, sstar=0.5)   # igfa filter:
+    assert E.shape[1] == 3                                  # aligned B1 dropped
 
 if __name__ == "__main__":
     for name, fn in sorted({k: v for k, v in globals().items()

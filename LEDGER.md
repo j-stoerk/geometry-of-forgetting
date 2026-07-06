@@ -10,6 +10,45 @@ Reference implementation: [`interference_ledger.py`](interference_ledger.py).
 Validation (decision quality vs fixed strategies + oracle):
 [`demo_interference_controller.py`](demo_interference_controller.py).
 
+---
+
+## The whole method in one sentence
+
+**One state object, one gate, one loop.** The state is a tracked second moment
+(or its sketch) plus held-out micro-cache gradients and per-task bases; every
+metric below is a read-out of it. The gate is a single QP — every protection
+method is a constraint choice. The loop is *measure → attribute → act*: the
+panel measures, the [forgetting decomposition](NOTE_forgetting_decomposition.md)
+attributes (floor / capacity / control), and each term's sole remedy acts.
+
+### One gate: all protection methods are constraint sets
+
+`qp_gate(u, G, G_eq)` solves `min ‖v−u‖² s.t. Gᵀv ≤ 0, G_eqᵀv = 0` (NNLS dual;
+equalities as mirrored pairs). Machine-checked recoveries
+([`evaluate_unified_gate.py`](evaluate_unified_gate.py)):
+
+| constraint rows | recovered method | checked |
+|---|---|---|
+| none | naive sharing | exact |
+| one sampled `∇L_u` (inequality) | A-GEM / threshold-free sign gate | 3e-16 |
+| all stored `∇L_u` (inequalities) | **active-set gate** (the QP itself) | — |
+| protected bases (equalities) | OGD / GPM projection | 1e-15 |
+| bases of tasks with overlap < s\* only | **igfa's s\*-threshold gate** | trajectory-identical, 1e-15 |
+
+Constraint *quality* is governed by two rules of the same state object: anchors
+must be **held-out and adequately sized** (a train-anchored gate protects
+memorized noise — `NOTE_benign_forgetting.md`), and estimates too uncertain to
+act on trigger **defer** (bias-corrected floors + null test —
+`evaluate_floor_estimation.py`).
+
+### One loop: measure → attribute → act
+
+| step | what happens | remedy per attributed term |
+|---|---|---|
+| measure | the panel below, one `LedgerRow` per step | — |
+| attribute | `L = floor + capacity + control` (each ≥ 0, measurable) | — |
+| act | floor → accept or re-design tasks; capacity → expand/route; control → `qp_gate` + knapsack replay in recoverable excess | validated: each intervention moves only its own term |
+
 ## Install & quickstart
 
 ```bash
@@ -38,12 +77,15 @@ closed-form irreducible floor (see `NOTE_bregman_generalization.md`).
 
 ---
 
-## Core metrics
+## Core metrics — read-outs of the one state object
 
-Notation: `Σ_A = E_{D_A}[φφᵀ]` (frozen features) or `E[JJᵀ]` (Gauss–Newton,
-drifting features); `U` an orthonormal basis of the top-`r` occupied subspace;
-`g` an update/gradient; `∇L_u` the gradient of a stored task's loss; `w_t` a
-task head; `λ` the geometry spectrum.
+The state is `(Σ̂, {∇L_u micro-caches}, {B_t})`: the tracked second moment
+`Σ_A = E_{D_A}[φφᵀ]` (frozen features) or `E[JJᵀ]` (Gauss–Newton, drifting) or
+its Frequent-Directions sketch; held-out per-task gradient caches; per-task
+top-`r` bases. Every metric below — and every constraint set of the unified
+gate — is computed from these three, so staleness, small-sample bias, and
+anchor validity are properties of *one* estimator, not per-method caveats.
+Notation: `U` = top-`r` occupied basis, `g` = update/gradient, `λ` = spectrum.
 
 | Metric | Definition | Units | Decision it supports | Cost | Cadence |
 |---|---|---|---|---|---|

@@ -395,3 +395,54 @@ def jsd_floor(pi_a: np.ndarray, pi_b: np.ndarray,
     q = (da * pi_a + db * pi_b) / (da + db)
     kl = lambda p: (p * (np.log(p + 1e-300) - np.log(q + 1e-300))).sum(-1)
     return float(np.mean(da[:, 0] * kl(pi_a) + db[:, 0] * kl(pi_b)))
+
+
+# ---------------------------------------------------------------------
+#  The unified gate (Corollary "the sign gate is optimal monotone
+#  control"): EVERY protection method in this framework is
+#
+#      v* = argmin ||v - u||^2   s.t.  <g_i, v> <= 0   (inequality rows)
+#                                      <h_j, v>  = 0   (equality rows)
+#
+#  for some choice of constraint rows -- one function, one dual (NNLS;
+#  equalities enter as mirrored +/- inequality pairs):
+#
+#      constraint set                          recovered method
+#      -----------------------------------------------------------------
+#      none                                    naive sharing
+#      one sampled grad L_u                    A-GEM / threshold-free sign gate
+#      all stored grad L_u (inequalities)      active-set gate
+#      protected-subspace bases (equalities)   OGD / GPM projection
+#      bases of tasks with overlap < s* only   igfa's s*-threshold gate
+# ---------------------------------------------------------------------
+def qp_gate(u: np.ndarray, G: Optional[np.ndarray] = None,
+            G_eq: Optional[np.ndarray] = None) -> np.ndarray:
+    """One gate for all protection methods.  u: desired update (d,);
+    G: (d, m) inequality rows <g_i, v> <= 0;  G_eq: (d, k) equality rows.
+    Returns the exact KKT solution v = u - C @ nnls(C, u)."""
+    from scipy.optimize import nnls as _nnls
+    cols = []
+    if G is not None and G.size:
+        cols.append(np.atleast_2d(G.T).T if G.ndim > 1 else G[:, None])
+    if G_eq is not None and G_eq.size:
+        E = G_eq if G_eq.ndim > 1 else G_eq[:, None]
+        cols.append(E); cols.append(-E)                   # mirrored pair = equality
+    if not cols:
+        return u
+    C = np.hstack(cols)
+    lam, _ = _nnls(C, u)
+    return u - C @ lam
+
+
+def constraints_from_tasks(bases: List[np.ndarray], B_new: Optional[np.ndarray] = None,
+                           sstar: Optional[float] = None) -> np.ndarray:
+    """Equality rows for subspace protection.  With sstar and B_new given,
+    keep only CONFLICTING tasks (overlap < s*): igfa's threshold gate.
+    Without them, keep all: OGD/GPM."""
+    keep = []
+    for B in bases:
+        if sstar is not None and B_new is not None:
+            if principal_overlap(B, B_new) >= sstar:
+                continue                                   # aligned -> shared
+        keep.append(B)
+    return np.hstack(keep) if keep else np.zeros((bases[0].shape[0], 0))
