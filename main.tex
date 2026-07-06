@@ -77,7 +77,6 @@ In deep networks, the same quantity is recovered through path-averaged curvature
 
 When task supports are disjoint, forgetting can be eliminated structurally and when task supports overlap in conflicting directions, a non-zero distortion floor is unavoidable.
 The same geometry optimally merges models through task-aware orthogonalization.
-
 From this analysis we derive Interference-Gated Functional
 Allocation (\IGFA), a replay-free, Fisher-free method that shares
 directions when tasks align and protects them when they conflict.
@@ -1493,7 +1492,7 @@ is the universal worst case), and the lower constant $(1-1/K)/(\ln K)^2$ to
 $4\times10^{-3}$, attained at the uniform posterior (Fig.~\ref{fig:multiclass}).
 
 \begin{figure}[htb]\centering
-\includegraphics[width=0.62\textwidth]{fig_mi_identity}
+\includegraphics[width=\textwidth]{fig_mi_identity}
 \caption{Floor / mutual-information verification. The exact identity
 Eq.~\eqref{eq:mi-identity} against the simulated single-head excess risk
 $\mathcal{D}^\star$, on the $y=x$ line, with the floor rising as identifiability falls and
@@ -1501,7 +1500,7 @@ remaining inside the mutual-information sandwich (band) throughout.}
 \label{fig:mi}
 \end{figure}
 \begin{figure}[htb]\centering
-\includegraphics[width=0.62\textwidth]{fig_multiclass}
+\includegraphics[width=\textwidth]{fig_multiclass}
 \caption{Tight multiclass entropy--variance constants for the floor sandwich,
 $K=2$--$10$. \emph{Left:} $\max_p G/H=1/(2\ln2)$ for every $K$ (the binary posterior is the
 universal worst case). \emph{Right:} $\min_p G/H^2=(1-1/K)/(\ln K)^2$, attained at the
