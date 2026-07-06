@@ -21,6 +21,10 @@
 \usepackage{caption}
 \usepackage{enumitem}
 \usepackage{xcolor}
+\definecolor{clsgrey}{HTML}{7F8C8D}   % figure-1 method-class colours
+\definecolor{clsorange}{HTML}{E08E0B}
+\definecolor{clsblue}{HTML}{2B6CB0}
+\definecolor{clspurple}{HTML}{8E44AD}
 \usepackage[hidelinks]{hyperref}
 \usepackage{microtype}
 \usepackage{amsthm}
@@ -91,11 +95,16 @@ merging; neural tangent kernel; gradient projection; rate--distortion; represent
 \includegraphics[width=0.9\textwidth]{fig_teaser}
 \caption{\textbf{Accuracy versus forgetting.}  Nine methods are tested on
 the exact-A1 Rotated-Digits benchmark (five rotations, frozen random features; mean over
-$5$ seeds) and differentiated by method class (baseline / corrective / structural / merging); our
-methods are marked ``(ours)''; higher accuracy (up) and lower forgetting (right) are better. \emph{Corrective}
-(EWC, replay) and \emph{online structural} (\OGD{}/\textsc{gpm}, \IGFA) methods learn the
-stream sequentially, whereas \emph{merging} methods solve each rotation independently and
-combine offline. 
+$5$ seeds) and differentiated by method class: baseline
+(\textcolor{clsgrey}{$\bullet$}), corrective (\textcolor{clsorange}{$\bullet$}),
+structural (\textcolor{clsblue}{$\bullet$}), and merging
+(\textcolor{clspurple}{$\bullet$}); our methods are marked ``(ours)'' and drawn as
+stars in their class colour (\textcolor{clsblue}{$\bigstar$},
+\textcolor{clspurple}{$\bigstar$}); higher accuracy (up) and lower forgetting (right)
+are better. Corrective
+(EWC, replay) and structural (\OGD{}/\textsc{gpm}, \IGFA) methods learn the
+stream sequentially, whereas merging methods solve each rotation independently and
+combine offline.
 \emph{(i)} The $\Sig$-orthogonal merge of Theorem~\ref{thm:merge} attains near-oracle accuracy
 ($0.885$ against a $0.903$ per-task ceiling) with the smallest
 post-merge residual floor ($D=0.032$, versus $0.20$ and $0.38$ for the isotropic and
