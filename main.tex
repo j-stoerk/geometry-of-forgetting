@@ -1193,7 +1193,13 @@ while the floor is invariant throughout (Sec.~\ref{si:beyond}). The practical
 consequence is a diagnosis rule that precedes every method choice in this paper's
 taxonomy: measure which term dominates (floor from the data, class optimum from the
 deployed geometry, control as the remainder) \emph{before} deciding on a mechanism, because each
-family of continual-learning methods can repair exactly one of the three. A further
+family of continual-learning methods can repair exactly one of the three. The
+attribution is measurable end to end on real continual pretraining: on the four-domain
+language stream, a certified floor bound of $0.005$ nats/token against observed
+forgetting of $0.16$--$0.40$ establishes that at least $97\%$ of the forgetting was
+avoidable in principle, with the control term dominating or co-dominating at both
+scales and the active-set gate removing a third to a half of it
+(Sec.~\ref{si:beyond}). A further
 split follows from the identity's anchor: evaluated on the deployment rather than the
 training distribution, forgetting separates into knowledge loss and memorization loss,
 and the two can carry opposite signs. An interfering update can raise train loss while
@@ -2557,6 +2563,52 @@ itself ($M=30<d$, the anchor interpolates its own noise) the advantage collapses
 which is the estimation--abstention rule's other face. The held-out micro-caches used
 throughout the language experiments (Sec.~\ref{si:llm}) are therefore mandated by the
 theory, not merely hygienic.
+
+\paragraph{Attributed forgetting at scale.} The decomposition
+Eq.~\eqref{eq:decomposition} is measurable end to end on real continual pretraining,
+yielding forgetting curves that state \emph{which part was ever avoidable}
+(\texttt{pythia-410m} and \texttt{pythia-1b}, LoRA $r{=}8$ on the four-domain stream;
+per-domain single-task references, joint training as the class-optimum surrogate at
+ranks $\{2,8,32\}$, sequential naive and active-set arms;
+\texttt{kaggle\_forgetting\_attribution.py}, \texttt{kaggle\_floor\_certificate.py},
+archived results and analysis in the repository). \emph{The floor is certified, not
+assumed}: the generative domain classifier built from the single-domain adapters
+separates held-out chunks perfectly at $410$m (accuracy $1.000$, cross-entropy
+$0.0048$ nats/token), and since any classifier's cross-entropy upper-bounds
+$H(T\mid X)\ge I(T;Y\mid X)$ and the floor is a property of the data, the one bound
+governs both models: at least $97.1\%$ ($410$m, observed forgetting $0.164$ nats/token)
+and $98.8\%$ ($1$b, $0.399$) of the measured forgetting was \emph{avoidable in
+principle}. The attribution, in the exact KL observable (per-token
+$\mathrm{KL}$ to the single-domain anchors, netted of the measured seed-to-seed
+two-models baseline of $0.028$/$0.020$):
+\begin{center}\small
+\begin{tabular}{lcc}
+\toprule
+ & \texttt{pythia-410m} & \texttt{pythia-1b} \\
+\midrule
+net forgetting (naive) & $0.269$ & $0.624$ \\
+net class term & $0.161$ & $0.249$ \\
+net control term & $0.108$ & $0.375$ \\
+control after the active-set gate & $0.063$ ($41\%$ removed) & $0.249$ ($34\%$ removed) \\
+certified floor & \multicolumn{2}{c}{$\le 0.0048$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+Three readings. First, the class term is real ($6$--$13\times$ the seed baseline) but
+\emph{flat in adapter rank} across $\{2,8,32\}$: within-class interference on this
+stream resides in the shared frozen geometry and joint optimization, not in adapter
+width, so expansion is not the indicated remedy---policy is, and the gate removes a
+third to a half of exactly the control term (cross-entropy view: naive versus gate
+paired $p=0.044$ at $410$m, $p=0.0018$ at $1$b). Second, the decomposition's sanity
+anchor holds on real data: sequential training fits each domain exactly as well as
+single-task training (diagonal-minus-single $+0.000$ at $410$m). Third, the
+Bregman residual of the preceding paragraph is visible at scale:
+$\mathbb{E}[\mathrm{KL}]$ exceeds the cross-entropy excess by $0.14$--$0.23$
+nats/token because the single-domain anchors are converged on their training chunks,
+not on the held-out anchor. Caveats: the recipe is fixed across scales (learning rate
+and budget not re-tuned, so the $410$m$\to$$1$b growth in forgetting is a
+fixed-recipe comparison), joint training only upper-bounds the class optimum (the
+control term is conservative), and the arms carry two to three seeds.
 
 \paragraph{Protection blocks autoregressive cascades at the source.} In a generative loop,
 a one-step corruption of the transition operator compounds over the horizon: after
