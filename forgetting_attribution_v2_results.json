@@ -1,0 +1,802 @@
+{
+ "pythia-410m": {
+  "probe": {
+   "probe_ce": 1.1401177644729614,
+   "probe_acc": 0.765625
+  },
+  "single/r2/d0": {
+   "0": {
+    "domain": "news",
+    "eval_ce": 3.306204636891683,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r2_d0_s0.pt"
+   },
+   "1": {
+    "domain": "news",
+    "eval_ce": 3.3285133838653564,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r2_d0_s1.pt"
+   }
+  },
+  "single/r2/d1": {
+   "0": {
+    "domain": "imdb",
+    "eval_ce": 3.4698038498560586,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r2_d1_s0.pt"
+   },
+   "1": {
+    "domain": "imdb",
+    "eval_ce": 3.4647138516108194,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r2_d1_s1.pt"
+   }
+  },
+  "single/r2/d2": {
+   "0": {
+    "domain": "wiki",
+    "eval_ce": 3.2472978830337524,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r2_d2_s0.pt"
+   },
+   "1": {
+    "domain": "wiki",
+    "eval_ce": 3.237268845240275,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r2_d2_s1.pt"
+   }
+  },
+  "single/r2/d3": {
+   "0": {
+    "domain": "tweets",
+    "eval_ce": 4.354605515797933,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r2_d3_s0.pt"
+   },
+   "1": {
+    "domain": "tweets",
+    "eval_ce": 4.339186668395996,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r2_d3_s1.pt"
+   }
+  },
+  "single/r8/d0": {
+   "0": {
+    "domain": "news",
+    "eval_ce": 3.3345847924550376,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r8_d0_s0.pt"
+   },
+   "1": {
+    "domain": "news",
+    "eval_ce": 3.2837982177734375,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r8_d0_s1.pt"
+   }
+  },
+  "single/r8/d1": {
+   "0": {
+    "domain": "imdb",
+    "eval_ce": 3.4706870317459106,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r8_d1_s0.pt"
+   },
+   "1": {
+    "domain": "imdb",
+    "eval_ce": 3.4569304386774697,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r8_d1_s1.pt"
+   }
+  },
+  "single/r8/d2": {
+   "0": {
+    "domain": "wiki",
+    "eval_ce": 3.309371074040731,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r8_d2_s0.pt"
+   },
+   "1": {
+    "domain": "wiki",
+    "eval_ce": 3.364323894182841,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r8_d2_s1.pt"
+   }
+  },
+  "single/r8/d3": {
+   "0": {
+    "domain": "tweets",
+    "eval_ce": 4.382594982783,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r8_d3_s0.pt"
+   },
+   "1": {
+    "domain": "tweets",
+    "eval_ce": 4.344894091288249,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r8_d3_s1.pt"
+   }
+  },
+  "single/r32/d0": {
+   "0": {
+    "domain": "news",
+    "eval_ce": 3.3126798073450723,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r32_d0_s0.pt"
+   },
+   "1": {
+    "domain": "news",
+    "eval_ce": 3.3599329392115274,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r32_d0_s1.pt"
+   }
+  },
+  "single/r32/d1": {
+   "0": {
+    "domain": "imdb",
+    "eval_ce": 3.4567575057347617,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r32_d1_s0.pt"
+   },
+   "1": {
+    "domain": "imdb",
+    "eval_ce": 3.4602646430333457,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r32_d1_s1.pt"
+   }
+  },
+  "single/r32/d2": {
+   "0": {
+    "domain": "wiki",
+    "eval_ce": 3.239694039026896,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r32_d2_s0.pt"
+   },
+   "1": {
+    "domain": "wiki",
+    "eval_ce": 3.301073988278707,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r32_d2_s1.pt"
+   }
+  },
+  "single/r32/d3": {
+   "0": {
+    "domain": "tweets",
+    "eval_ce": 4.348083019256592,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r32_d3_s0.pt"
+   },
+   "1": {
+    "domain": "tweets",
+    "eval_ce": 4.340406497319539,
+    "ckpt": "attr_ckpts_v2/pythia-410m/single_r32_d3_s1.pt"
+   }
+  },
+  "joint/r2": {
+   "0": {
+    "eval_ce": {
+     "news": 3.3574804862340293,
+     "imdb": 3.512748638788859,
+     "wiki": 3.410901665687561,
+     "tweets": 4.468611399332683
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/joint_r2_s0.pt",
+    "kl_to_single": {
+     "mean": 0.1824885128051277,
+     "per_domain": {
+      "news": 0.18861606552844912,
+      "imdb": 0.12035251226950819,
+      "wiki": 0.23849696061742587
+     }
+    }
+   },
+   "1": {
+    "eval_ce": {
+     "news": 3.40018359820048,
+     "imdb": 3.5132476886113486,
+     "wiki": 3.405657966931661,
+     "tweets": 4.446990172068278
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/joint_r2_s1.pt",
+    "kl_to_single": {
+     "mean": 0.17982569829685482,
+     "per_domain": {
+      "news": 0.18641229314128244,
+      "imdb": 0.12016789181025948,
+      "wiki": 0.2328969099390225
+     }
+    }
+   }
+  },
+  "joint/r8": {
+   "0": {
+    "eval_ce": {
+     "news": 3.3598318497339883,
+     "imdb": 3.5013442834218345,
+     "wiki": 3.3592942158381143,
+     "tweets": 4.426476875940959
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/joint_r8_s0.pt",
+    "kl_to_single": {
+     "mean": 0.19376366219808425,
+     "per_domain": {
+      "news": 0.20400945032675435,
+      "imdb": 0.12797008912394367,
+      "wiki": 0.2493114471435547
+     }
+    }
+   },
+   "1": {
+    "eval_ce": {
+     "news": 3.3768412669499717,
+     "imdb": 3.5162192583084106,
+     "wiki": 3.3976600964864097,
+     "tweets": 4.466697692871094
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/joint_r8_s1.pt",
+    "kl_to_single": {
+     "mean": 0.18412798658756446,
+     "per_domain": {
+      "news": 0.20427061441376454,
+      "imdb": 0.11676724501482146,
+      "wiki": 0.2313461003341074
+     }
+    }
+   }
+  },
+  "joint/r32": {
+   "0": {
+    "eval_ce": {
+     "news": 3.3576508363087973,
+     "imdb": 3.501951257387797,
+     "wiki": 3.3663108348846436,
+     "tweets": 4.448959032694499
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/joint_r32_s0.pt",
+    "kl_to_single": {
+     "mean": 0.1787315103325631,
+     "per_domain": {
+      "news": 0.18810063459741788,
+      "imdb": 0.12807437190859336,
+      "wiki": 0.22001952449167808
+     }
+    }
+   },
+   "1": {
+    "eval_ce": {
+     "news": 3.364566524823507,
+     "imdb": 3.486305276552836,
+     "wiki": 3.37692391872406,
+     "tweets": 4.444233655929565
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/joint_r32_s1.pt",
+    "kl_to_single": {
+     "mean": 0.18519647978735096,
+     "per_domain": {
+      "news": 0.19873629967997394,
+      "imdb": 0.1297750435476228,
+      "wiki": 0.22707809613445612
+     }
+    }
+   }
+  },
+  "seq/naive/r8": {
+   "0": {
+    "diag_ce": {
+     "news": 3.3345847924550376,
+     "imdb": 3.4789982239405313,
+     "wiki": 3.326242685317993,
+     "tweets": 4.371019124984741
+    },
+    "final_ce": {
+     "news": 3.4862153132756553,
+     "imdb": 3.577036658922831,
+     "wiki": 3.4488389094670615,
+     "tweets": 4.371019124984741
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/seq_naive_r8_s0.pt",
+    "kl_to_single": {
+     "mean": 0.2706401429464185,
+     "per_domain": {
+      "news": 0.2799669776375838,
+      "imdb": 0.1909538028747078,
+      "wiki": 0.3409996483269639
+     }
+    }
+   },
+   "1": {
+    "diag_ce": {
+     "news": 3.2837982177734375,
+     "imdb": 3.477527658144633,
+     "wiki": 3.314492702484131,
+     "tweets": 4.356008768081665
+    },
+    "final_ce": {
+     "news": 3.4999027649561563,
+     "imdb": 3.599135994911194,
+     "wiki": 3.552548408508301,
+     "tweets": 4.356008768081665
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/seq_naive_r8_s1.pt",
+    "kl_to_single": {
+     "mean": 0.32070789562435603,
+     "per_domain": {
+      "news": 0.3466326195423997,
+      "imdb": 0.20709107992217296,
+      "wiki": 0.4083999874084953
+     }
+    }
+   },
+   "2": {
+    "diag_ce": {
+     "news": 3.314381162325541,
+     "imdb": 3.4812717040379844,
+     "wiki": 3.28844420115153,
+     "tweets": 4.397178014119466
+    },
+    "final_ce": {
+     "news": 3.5309610764185586,
+     "imdb": 3.5871196190516152,
+     "wiki": 3.491564313570658,
+     "tweets": 4.397178014119466
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/seq_naive_r8_s2.pt",
+    "kl_to_single": {
+     "mean": 0.29925823962594583,
+     "per_domain": {
+      "news": 0.327099424647534,
+      "imdb": 0.20196045102096918,
+      "wiki": 0.36871484320933423
+     }
+    }
+   }
+  },
+  "seq/func-active/r8": {
+   "0": {
+    "diag_ce": {
+     "news": 3.3345847924550376,
+     "imdb": 3.4829649130503335,
+     "wiki": 3.2655928134918213,
+     "tweets": 4.342041254043579
+    },
+    "final_ce": {
+     "news": 3.389078458150228,
+     "imdb": 3.510886271794637,
+     "wiki": 3.373442808787028,
+     "tweets": 4.342041254043579
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/seq_func-active_r8_s0.pt",
+    "kl_to_single": {
+     "mean": 0.24351578684929476,
+     "per_domain": {
+      "news": 0.27744536512480006,
+      "imdb": 0.16169034777663824,
+      "wiki": 0.29141164764644595
+     }
+    }
+   },
+   "1": {
+    "diag_ce": {
+     "news": 3.2837982177734375,
+     "imdb": 3.4667954047520957,
+     "wiki": 3.2602291901906333,
+     "tweets": 4.331299543380737
+    },
+    "final_ce": {
+     "news": 3.38124410311381,
+     "imdb": 3.5346928040186563,
+     "wiki": 3.37952454884847,
+     "tweets": 4.331299543380737
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/seq_func-active_r8_s1.pt",
+    "kl_to_single": {
+     "mean": 0.2460913220102706,
+     "per_domain": {
+      "news": 0.27328007615457367,
+      "imdb": 0.16152450231116589,
+      "wiki": 0.30346938756507214
+     }
+    }
+   },
+   "2": {
+    "diag_ce": {
+     "news": 3.314381162325541,
+     "imdb": 3.4685537417729697,
+     "wiki": 3.301416357358297,
+     "tweets": 4.364764928817749
+    },
+    "final_ce": {
+     "news": 3.4566752513249717,
+     "imdb": 3.5467685063680015,
+     "wiki": 3.463547706604004,
+     "tweets": 4.364764928817749
+    },
+    "ckpt": "attr_ckpts_v2/pythia-410m/seq_func-active_r8_s2.pt",
+    "kl_to_single": {
+     "mean": 0.2676652648004647,
+     "per_domain": {
+      "news": 0.3031940009650283,
+      "imdb": 0.1739185138011542,
+      "wiki": 0.32588327963521163
+     }
+    }
+   }
+  }
+ },
+ "pythia-1b": {
+  "probe": {
+   "probe_ce": 1.942274570465088,
+   "probe_acc": 0.765625
+  },
+  "single/r2/d0": {
+   "0": {
+    "domain": "news",
+    "eval_ce": 2.806785782178243,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r2_d0_s0.pt"
+   },
+   "1": {
+    "domain": "news",
+    "eval_ce": 2.788973848025004,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r2_d0_s1.pt"
+   }
+  },
+  "single/r2/d1": {
+   "0": {
+    "domain": "imdb",
+    "eval_ce": 3.3157840172449746,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r2_d1_s0.pt"
+   },
+   "1": {
+    "domain": "imdb",
+    "eval_ce": 3.304826776186625,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r2_d1_s1.pt"
+   }
+  },
+  "single/r2/d2": {
+   "0": {
+    "domain": "wiki",
+    "eval_ce": 2.844381809234619,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r2_d2_s0.pt"
+   },
+   "1": {
+    "domain": "wiki",
+    "eval_ce": 2.8283714850743613,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r2_d2_s1.pt"
+   }
+  },
+  "single/r2/d3": {
+   "0": {
+    "domain": "tweets",
+    "eval_ce": 3.9078663190205893,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r2_d3_s0.pt"
+   },
+   "1": {
+    "domain": "tweets",
+    "eval_ce": 3.907146692276001,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r2_d3_s1.pt"
+   }
+  },
+  "single/r8/d0": {
+   "0": {
+    "domain": "news",
+    "eval_ce": 2.8203843037287393,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r8_d0_s0.pt"
+   },
+   "1": {
+    "domain": "news",
+    "eval_ce": 2.794437289237976,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r8_d0_s1.pt"
+   }
+  },
+  "single/r8/d1": {
+   "0": {
+    "domain": "imdb",
+    "eval_ce": 3.3318338791529336,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r8_d1_s0.pt"
+   },
+   "1": {
+    "domain": "imdb",
+    "eval_ce": 3.3230785926183066,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r8_d1_s1.pt"
+   }
+  },
+  "single/r8/d2": {
+   "0": {
+    "domain": "wiki",
+    "eval_ce": 2.849975069363912,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r8_d2_s0.pt"
+   },
+   "1": {
+    "domain": "wiki",
+    "eval_ce": 2.829973578453064,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r8_d2_s1.pt"
+   }
+  },
+  "single/r8/d3": {
+   "0": {
+    "domain": "tweets",
+    "eval_ce": 3.9118491808573403,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r8_d3_s0.pt"
+   },
+   "1": {
+    "domain": "tweets",
+    "eval_ce": 3.9102094570795694,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r8_d3_s1.pt"
+   }
+  },
+  "single/r32/d0": {
+   "0": {
+    "domain": "news",
+    "eval_ce": 2.8147799173990884,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r32_d0_s0.pt"
+   },
+   "1": {
+    "domain": "news",
+    "eval_ce": 2.7935084104537964,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r32_d0_s1.pt"
+   }
+  },
+  "single/r32/d1": {
+   "0": {
+    "domain": "imdb",
+    "eval_ce": 3.3143553336461387,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r32_d1_s0.pt"
+   },
+   "1": {
+    "domain": "imdb",
+    "eval_ce": 3.304619868596395,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r32_d1_s1.pt"
+   }
+  },
+  "single/r32/d2": {
+   "0": {
+    "domain": "wiki",
+    "eval_ce": 2.843689242998759,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r32_d2_s0.pt"
+   },
+   "1": {
+    "domain": "wiki",
+    "eval_ce": 2.8307426373163858,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r32_d2_s1.pt"
+   }
+  },
+  "single/r32/d3": {
+   "0": {
+    "domain": "tweets",
+    "eval_ce": 3.9087610642115274,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r32_d3_s0.pt"
+   },
+   "1": {
+    "domain": "tweets",
+    "eval_ce": 3.9064914782842,
+    "ckpt": "attr_ckpts_v2/pythia-1b/single_r32_d3_s1.pt"
+   }
+  },
+  "joint/r2": {
+   "0": {
+    "eval_ce": {
+     "news": 2.9022647539774575,
+     "imdb": 3.3403175274531045,
+     "wiki": 2.9063378175099692,
+     "tweets": 4.0675303141276045
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/joint_r2_s0.pt",
+    "kl_to_single": {
+     "mean": 0.22099956502438844,
+     "per_domain": {
+      "news": 0.245902095254012,
+      "imdb": 0.16966835532601424,
+      "wiki": 0.24742824449313908
+     }
+    }
+   },
+   "1": {
+    "eval_ce": {
+     "news": 2.912224531173706,
+     "imdb": 3.347090244293213,
+     "wiki": 2.945517977078756,
+     "tweets": 4.0710859298706055
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/joint_r2_s1.pt",
+    "kl_to_single": {
+     "mean": 0.24197706713138292,
+     "per_domain": {
+      "news": 0.26450379063763957,
+      "imdb": 0.17416129149789886,
+      "wiki": 0.2872661192586103
+     }
+    }
+   }
+  },
+  "joint/r8": {
+   "0": {
+    "eval_ce": {
+     "news": 2.92109751701355,
+     "imdb": 3.3534101247787476,
+     "wiki": 2.9315139849980674,
+     "tweets": 4.093427220980327
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/joint_r8_s0.pt",
+    "kl_to_single": {
+     "mean": 0.2590467748366629,
+     "per_domain": {
+      "news": 0.28631457381361114,
+      "imdb": 0.19103147101214552,
+      "wiki": 0.299794279684232
+     }
+    }
+   },
+   "1": {
+    "eval_ce": {
+     "news": 2.9355854590733848,
+     "imdb": 3.3586320082346597,
+     "wiki": 2.963695247968038,
+     "tweets": 4.104490240414937
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/joint_r8_s1.pt",
+    "kl_to_single": {
+     "mean": 0.27812044263824703,
+     "per_domain": {
+      "news": 0.31229645436204323,
+      "imdb": 0.19476890188502513,
+      "wiki": 0.3272959716676727
+     }
+    }
+   }
+  },
+  "joint/r32": {
+   "0": {
+    "eval_ce": {
+     "news": 2.934395352999369,
+     "imdb": 3.364162007967631,
+     "wiki": 2.938345948855082,
+     "tweets": 4.09902807076772
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/joint_r32_s0.pt",
+    "kl_to_single": {
+     "mean": 0.2648515838963466,
+     "per_domain": {
+      "news": 0.29645001418947237,
+      "imdb": 0.19625707310954416,
+      "wiki": 0.3018476643900233
+     }
+    }
+   },
+   "1": {
+    "eval_ce": {
+     "news": 2.9383379220962524,
+     "imdb": 3.365599751472473,
+     "wiki": 2.956805189450582,
+     "tweets": 4.103405078252156
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/joint_r32_s1.pt",
+    "kl_to_single": {
+     "mean": 0.28201349013120797,
+     "per_domain": {
+      "news": 0.31688910206471843,
+      "imdb": 0.1996776851143424,
+      "wiki": 0.3294736832145631
+     }
+    }
+   }
+  },
+  "seq/naive/r8": {
+   "0": {
+    "diag_ce": {
+     "news": 2.8202892939249673,
+     "imdb": 3.271191875139872,
+     "wiki": 2.901522914568583,
+     "tweets": 3.968840559323629
+    },
+    "final_ce": {
+     "news": 3.4145696560541787,
+     "imdb": 3.5105871756871543,
+     "wiki": 3.2499205271402993,
+     "tweets": 3.968840559323629
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/seq_naive_r8_s0.pt",
+    "kl_to_single": {
+     "mean": 0.6309751250299569,
+     "per_domain": {
+      "news": 0.8062174489178996,
+      "imdb": 0.3902633621936708,
+      "wiki": 0.6964445639783003
+     }
+    }
+   },
+   "1": {
+    "diag_ce": {
+     "news": 2.794560511906942,
+     "imdb": 3.2821549574534097,
+     "wiki": 2.9266077280044556,
+     "tweets": 3.9905892610549927
+    },
+    "final_ce": {
+     "news": 3.41026763121287,
+     "imdb": 3.5404279629389444,
+     "wiki": 3.2960171699523926,
+     "tweets": 3.9905892610549927
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/seq_naive_r8_s1.pt",
+    "kl_to_single": {
+     "mean": 0.653966771023167,
+     "per_domain": {
+      "news": 0.828330753356453,
+      "imdb": 0.4202239794993964,
+      "wiki": 0.7133455802136519
+     }
+    }
+   },
+   "2": {
+    "diag_ce": {
+     "news": 2.815226117769877,
+     "imdb": 3.275301178296407,
+     "wiki": 2.9366653760274253,
+     "tweets": 3.9657009840011597
+    },
+    "final_ce": {
+     "news": 3.395273963610331,
+     "imdb": 3.517048478126526,
+     "wiki": 3.2833013931910195,
+     "tweets": 3.9657009840011597
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/seq_naive_r8_s2.pt",
+    "kl_to_single": {
+     "mean": 0.6447625272855984,
+     "per_domain": {
+      "news": 0.8330567427507536,
+      "imdb": 0.4021338290116918,
+      "wiki": 0.6990970100943498
+     }
+    }
+   }
+  },
+  "seq/func-active/r8": {
+   "0": {
+    "diag_ce": {
+     "news": 2.8203063011169434,
+     "imdb": 3.273325721422831,
+     "wiki": 2.9144891500473022,
+     "tweets": 3.972067395846049
+    },
+    "final_ce": {
+     "news": 3.247706929842631,
+     "imdb": 3.4797865947087607,
+     "wiki": 3.0865746339162192,
+     "tweets": 3.972067395846049
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/seq_func-active_r8_s0.pt",
+    "kl_to_single": {
+     "mean": 0.5116198081669845,
+     "per_domain": {
+      "news": 0.6459680842602347,
+      "imdb": 0.3487678738090936,
+      "wiki": 0.5401234664316252
+     }
+    }
+   },
+   "1": {
+    "diag_ce": {
+     "news": 2.7945547103881836,
+     "imdb": 3.272846738497416,
+     "wiki": 2.9298203786214194,
+     "tweets": 3.975137710571289
+    },
+    "final_ce": {
+     "news": 3.266115585962931,
+     "imdb": 3.493731379508972,
+     "wiki": 3.1196457942326865,
+     "tweets": 3.975137710571289
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/seq_func-active_r8_s1.pt",
+    "kl_to_single": {
+     "mean": 0.5217205257866326,
+     "per_domain": {
+      "news": 0.6535037934310793,
+      "imdb": 0.36443925842525454,
+      "wiki": 0.5472185255035641
+     }
+    }
+   },
+   "2": {
+    "diag_ce": {
+     "news": 2.815315047899882,
+     "imdb": 3.2703095277150473,
+     "wiki": 2.935721198717753,
+     "tweets": 3.9881474574406943
+    },
+    "final_ce": {
+     "news": 3.2686211268107095,
+     "imdb": 3.4959508975346885,
+     "wiki": 3.0992433230082193,
+     "tweets": 3.9881474574406943
+    },
+    "ckpt": "attr_ckpts_v2/pythia-1b/seq_func-active_r8_s2.pt",
+    "kl_to_single": {
+     "mean": 0.5190254571869617,
+     "per_domain": {
+      "news": 0.6577694810281588,
+      "imdb": 0.37163768227644794,
+      "wiki": 0.5276692082562785
+     }
+    }
+   }
+  }
+ }
+}
