@@ -66,7 +66,6 @@ def exp_sstar():
         ax.axvline(sg[np.argmin(e)], color=c, ls="--", lw=1)
     ax.set_xlabel(r"similarity threshold $s^\ast$ (target cosine)")
     ax.set_ylabel("avg. population error (lower better)")
-    ax.set_title("Broad optimum, well above chance overlap", fontsize=9.5)
     ax.legend(fontsize=8)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_sstar.pdf"); plt.close(fig)
 
@@ -101,7 +100,6 @@ def exp_graceful(d=40, rank=12, trials=200):
     ax.plot(drop, loss_large, "-s", ms=4, color=RED, label="drop largest-energy first")
     ax.set_xlabel("number of occupied directions overwritten")
     ax.set_ylabel("forgetting of the old task  $\\Delta L_A$")
-    ax.set_title("Overwriting low-energy directions degrades gracefully", fontsize=9.5)
     ax.legend(fontsize=8, loc="upper left")
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_graceful.pdf"); plt.close(fig)
 
@@ -165,14 +163,12 @@ def exp_drift(d=60, r0=4, T=25, drift=0.18, kmax=12, trials=40):
     ax[0].axhline(r0, color="black", ls="--", lw=0.8); ax[0].text(1, r0 - 3.0, "true rank", fontsize=8)
     ax[0].set_xlabel("task index in the drifting stream")
     ax[0].set_ylabel("occupied / effective rank")
-    ax[0].set_title("Stale projection exhausts capacity under drift", fontsize=9.5)
     ax[0].legend(fontsize=7.8, loc="center right")
     ax[1].plot(xs, plast_stale, "-o", ms=3, color=RED, label="stale subspace (OGD/GPM)")
     ax[1].plot(xs, plast_rec, "-s", ms=3, color=GREEN, label="recursive GN (self-correcting)")
     ax[1].set_xlabel("task index in the drifting stream")
     ax[1].set_ylabel("free plasticity  $(d-\\mathrm{rank})/d$")
     ax[1].set_ylim(-0.03, 1.0)
-    ax[1].set_title("Re-estimation preserves capacity to learn", fontsize=9.5)
     ax[1].legend(fontsize=7.8, loc="lower left")
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_drift.pdf"); plt.close(fig)
 

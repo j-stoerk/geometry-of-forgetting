@@ -73,11 +73,9 @@ def exp_feasibility(d=12, N=6000):
     ax[0].plot([0, lim], [0, lim], "--", color=GREY, lw=1)
     ax[0].scatter(I_true, I_est, s=28, color=BLUE)
     ax[0].set_xlabel(r"true $I(T;\phi)$ (nats)"); ax[0].set_ylabel(r"probe estimate $\hat I$")
-    ax[0].set_title(f"Cheap probe recovers MI ($r={res['feasibility_I_corr']:.3f}$)", fontsize=9.5)
     ax[0].set_xlim(0, lim); ax[0].set_ylim(0, lim)
     ax[1].scatter(I_est, floor, s=28, color=GREEN)
     ax[1].set_xlabel(r"pre-flight $\hat I$ (no CL run)"); ax[1].set_ylabel("distortion floor")
-    ax[1].set_title("Probe forecasts the floor (monotone)", fontsize=9.5)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_feasibility.pdf"); plt.close(fig)
 
 
@@ -139,7 +137,6 @@ def exp_cheap_gn(d=128, r=6, n=4000, trials=8):
     ax.plot([e for e in ells], fde, "-o", color=GREEN, ms=5, label="Frequent Directions $O(d\\ell)$")
     ax.set_xlabel(r"FD sketch rows $\ell$ (memory $\propto \ell d$)")
     ax.set_ylabel(f"captured top-{r} energy")
-    ax.set_title("Cheap streaming subspace matches full at low memory", fontsize=9.5)
     ax.legend(fontsize=8, loc="lower right"); ax.set_ylim(min(np.mean(oja_e) - 0.05, 0.8), 1.01)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_cheapgn.pdf"); plt.close(fig)
 
@@ -195,11 +192,11 @@ def exp_soft_knee(d=40, r=2, T=22, trials=20, lr=0.4, steps=1500):
     ax[0].text(d / r - 0.5, 0.82, "$T=d/r$", fontsize=8, ha="right",
                transform=ax[0].get_xaxis_transform())
     ax[0].set_xlabel("number of tasks $T$"); ax[0].set_ylabel("mean residual distortion")
-    ax[0].set_title("Soft gating smears the knee", fontsize=9.5); ax[0].legend(fontsize=8)
+    ax[0].legend(fontsize=8)
     ax[1].axvline(d, color="black", ls=":", lw=1); ax[1].text(d * 0.6, 0.1, "$r_{\\rm eff}=d$", fontsize=8)
     ax[1].set_xlabel(r"occupied capacity $r_{\rm eff}=\sum_j(1-\mathrm{keep}_j)$")
     ax[1].set_ylabel("mean residual distortion")
-    ax[1].set_title("...but collapses vs $r_{\\rm eff}$ (knee at $d$)", fontsize=9.5); ax[1].legend(fontsize=8)
+    ax[1].legend(fontsize=8)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_softknee.pdf"); plt.close(fig)
     res["softknee_cap_at_T_hard"] = float(curves["hard (keep=0)"][1][-1])
     res["softknee_cap_at_T_soft1"] = float(curves[r"soft $\beta=1$"][1][-1])
@@ -244,7 +241,6 @@ def exp_perdirection(k=10, noise=0.8, m=12, trials=4000):
     ax.plot(fracs, perdir, "-^", ms=4, color=GREEN, label="per-direction gate (ours)")
     ax.set_xlabel("fraction of shared directions that align (transfer)")
     ax.set_ylabel("B's estimation error on the shared block")
-    ax.set_title("Per-direction gate dominates the per-task gate", fontsize=9.5)
     ax.legend(fontsize=8)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_perdirection.pdf"); plt.close(fig)
 

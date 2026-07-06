@@ -119,7 +119,6 @@ def run():
     ax[0].scatter(idn, drc, s=22, color=BLUE)
     ax[0].set_xlabel(r"identity  $\frac{1}{2}\,E[\,\mathrm{Var}(T|\phi)\,(\phi^\top\delta)^2]$")
     ax[0].set_ylabel(r"direct single-head excess risk $\mathcal{D}^\star$")
-    ax[0].set_title(f"Exact identity (max rel. err {rel:.1e})", fontsize=9.5)
     ax[0].set_xlim(0, lim); ax[0].set_ylim(0, lim)
 
     ovl = np.log(2) - I                                    # H(T|phi): 0 identifiable .. ln2 not
@@ -129,7 +128,6 @@ def run():
     ax[1].plot(ovl[order], D[order], "-o", color=BLUE, ms=4, label=r"floor $\mathcal{D}^\star$")
     ax[1].set_xlabel(r"$H(T|\phi)=\ln 2 - I(T;\phi)$  (unidentifiability)")
     ax[1].set_ylabel("distortion floor")
-    ax[1].set_title("Floor squeezed by mutual information", fontsize=9.5)
     ax[1].legend(fontsize=8, loc="upper left")
     fig.tight_layout(); fig.savefig("figures/fig_mi_identity.pdf"); plt.close(fig)
 

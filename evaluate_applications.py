@@ -201,7 +201,6 @@ def make_figure(rA, rD, rE):
     a.scatter(rA["pred"], rA["meas"], s=26, color=BLUE, alpha=0.75, zorder=3)
     a.set_xlabel(r"predicted  $\nabla L_{\rm PDE}^\top\Delta+\frac{1}{2}\Delta^\top\Sigma_{\rm PDE}\Delta$")
     a.set_ylabel("measured PDE-loss change")
-    a.set_title("PINN: exact interference identity", fontsize=11, fontweight="bold")
 
     b = ax[1]                                                  # (b) RL: old-env regret per method
     modes = ["naive", "ewc", "gated"]
@@ -222,7 +221,6 @@ def make_figure(rA, rD, rE):
     b.legend(handles=[mpatches.Patch(fc="#555", label="old env (retention)"),
                       mpatches.Patch(fc="#555", alpha=0.45, hatch="//", label="new env (adaptation)")],
              fontsize=9)
-    b.set_title("RL: Fisher gate retains the old policy", fontsize=11, fontweight="bold")
 
     c = ax[2]                                                  # (c) meta-learned features shrink floor
     pairs = [("overlap $\\bar s$", rE["ov_base"], rE["ov_meta"]),
@@ -236,7 +234,6 @@ def make_figure(rA, rD, rE):
     c.set_yscale("log"); c.set_ylim(4e-4, 30)
     c.set_xticks(x, [p[0] for p in pairs], fontsize=10)
     c.legend(fontsize=9)
-    c.set_title("Meta-learning shrinks the floor", fontsize=11, fontweight="bold")
 
     for axis in ax:
         axis.spines[["top", "right"]].set_visible(False)

@@ -35,56 +35,107 @@ def clean(ax):
     ax.set_aspect("equal"); ax.axis("off")
 
 
-# ============================ FIGURE 2 ============================
+# ============================ FIGURE (thm_geometry) ============================
+# Two panels (former (a) removed): the path-averaged-curvature identity and
+# the Sigma-weighted optimal merge, both drawn from REAL 2x2 geometry so the
+# ellipses, optima, and contours are exact, not schematic.
+def rot(deg):
+    t = np.radians(deg)
+    return np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]])
+
+
+def cov_ellipse(ax, S, center, scale, **kw):
+    """Draw the ellipse x' S^{-1} x = scale^2 (a true level set of 1/2 x'Sx dual)."""
+    w, V = np.linalg.eigh(S)
+    ang = np.degrees(np.arctan2(V[1, -1], V[0, -1]))
+    ax.add_patch(Ellipse(center, 2 * scale * np.sqrt(w[-1]), 2 * scale * np.sqrt(w[0]),
+                         angle=ang, fill=False, **kw))
+
+
 def figure2():
-    fig, ax = plt.subplots(1, 3, figsize=(13.2, 4.0))
+    fig, ax = plt.subplots(1, 2, figsize=(12.6, 4.7))
 
-    # (a) interference energy: contours + Delta split -------------------
+    # ---- (a) path-averaged curvature: the identity survives drift ----------
     a = ax[0]
-    for r in (0.8, 1.4, 2.0, 2.6):
-        a.add_patch(Ellipse((0, 0), 1.8 * r, 2.4 * r, fill=False, ec=BLUE, lw=1.3))
-    a.plot(0, 0, "o", color=BLACK, ms=7, zorder=5)
-    txt(a, 0.0, -0.62, r"$\mathbf{w}_A^\ast$", ha="center")   # inside innermost contour, below the dot
-    tip = (1.7, 2.1)
-    arrow(a, (0, 0), tip, BLACK)                       # Delta
-    arrow(a, (0, 0), (1.7, 0), BLUE)                   # Delta_par (range, forgetting)
-    arrow(a, (1.7, 0), tip, GREEN)                     # Delta_perp (ker, free)
-    txt(a, 1.9, 2.5, r"$\Delta=\mathbf{w}_B-\mathbf{w}_A^\ast$", ha="left")
-    txt(a, 2.15, 1.6, r"$\Delta_\perp\in\ker\Sigma_A$", color=GREEN, ha="left")
-    txt(a, 2.45, 0.82, "(interference-free)", color=GREEN, ha="left")
-    txt(a, 0.0, -3.7, r"$\Delta_\parallel\in\mathrm{range}\,\Sigma_A$ (causes forgetting)", color=BLUE)
-    a.set_xlim(-4.9, 5.8); a.set_ylim(-4.3, 3.4); clean(a)
-
-    # (b) path-averaged curvature ---------------------------------------
-    b = ax[1]
-    wA, wB = np.array([0.0, 0.0]), np.array([6.0, 1.8])
-    arrow(b, wA, wB, BLACK, lw=2.2)
-    d = wB - wA; ang = np.degrees(np.arctan2(d[1], d[0]))
-    for t, c, lw in [(0.25, GREY, 1.4), (0.5, BLACK, 2.2), (0.75, GREY, 1.4)]:
+    wA, wB = np.array([0.0, 0.0]), np.array([6.4, 1.9])
+    d = wB - wA
+    # loss landscape of task A: light contours anchored at w_A
+    for r, al in [(0.9, 0.5), (1.7, 0.35), (2.5, 0.22)]:
+        cov_ellipse(a, rot(18) @ np.diag([2.4, 0.55]) @ rot(18).T, wA, r,
+                    ec=BLUE, lw=1.3, alpha=al)
+    # the straight chord w_A -> w_B and the drifted geodesic
+    arrow(a, wA, wB, BLACK, lw=2.6)
+    ts = np.linspace(0, 1, 80)
+    curve = wA + np.outer(ts, d) + np.outer(np.sin(ts * np.pi), [-0.25, 1.05])
+    a.plot(curve[:, 0], curve[:, 1], "--", color=GREY, lw=1.6)
+    txt(a, 4.15, 2.75, "drifting loss geometry", color=GREY)
+    # local curvature along the chord: rotating/scaling TRUE ellipses whose
+    # line width encodes the (1-t) weight of  Hbar = 2 int (1-t) H(t) dt
+    for t in (0.12, 0.36, 0.60, 0.84):
         p = wA + t * d
-        b.add_patch(Ellipse(p, 0.5, 2.0, angle=ang, fill=False, ec=c, lw=lw))
-    # drifted geodesic
-    ts = np.linspace(0, 1, 60); curve = wA + np.outer(ts, d) + np.outer(np.sin(ts * np.pi), [-0.2, 0.9])
-    b.plot(curve[:, 0], curve[:, 1], "--", color=GREY, lw=1.6)
-    txt(b, -0.2, -0.35, r"$w_A$", ha="right"); txt(b, 6.2, 1.8, r"$w_B$", ha="left")
-    txt(b, 3.0, -0.9, r"path-averaged curvature $\bar H_A$")
-    b.set_xlim(-1.2, 7.4); b.set_ylim(-2.0, 3.2); clean(b)
+        St = rot(18 + 55 * t) @ np.diag([1.0 + 0.9 * t, 0.28]) @ rot(18 + 55 * t).T
+        col = tuple((1 - t) * np.array([0.17, 0.42, 0.69]) + t * np.array([0.75, 0.22, 0.17]))
+        cov_ellipse(a, St, p, 0.55, ec=col, lw=3.2 * (1 - t) + 0.9)
+        a.plot(*p, ".", color=col, ms=5)
+    # the (1-t) weighting, drawn as a shrinking wedge under the path
+    base = wA + np.array([0.0, -1.55])
+    a.fill([base[0], base[0] + 6.4, base[0]], [base[1], base[1], base[1] - 0.62],
+           color=GREY, alpha=0.3, lw=0)
+    txt(a, 2.45, -2.55, r"weight $(1-t)$: early curvature counts more", color=GREY)
+    a.plot(*wA, "o", color=BLACK, ms=8, zorder=6); a.plot(*wB, "o", color=BLACK, ms=8, zorder=6)
+    txt(a, -0.28, -0.42, r"$w_A$", ha="right"); txt(a, 6.62, 1.9, r"$w_B$", ha="left")
+    txt(a, 3.1, 3.35, r"$\Delta L_A=\frac{1}{2}\,\Delta^\top \bar H_A\,\Delta$,"
+                      r"  $\bar H_A=2\int_0^1 (1-t)\,\nabla^2 L_A\,dt$")
+    a.set_xlim(-2.6, 8.6); a.set_ylim(-3.0, 3.9); clean(a)
 
-    # (c) optimal merge = Sigma-orthogonalization -----------------------
-    c = ax[2]
-    c.plot(0, 0, "o", color=BLACK, ms=7, zorder=5)
-    txt(c, -0.25, 0.18, r"$w_0$", ha="right")
-    vecs = [((1.7, 2.0), BLUE), ((2.2, -0.7), RED), ((-1.9, -1.1), GREY)]
-    for (v, col) in vecs:
-        arrow(c, (0, 0), v, col, lw=2.4)
-        ang = np.degrees(np.arctan2(v[1], v[0]))
-        c.add_patch(Ellipse(v, 0.45, 1.5, angle=ang, fill=False, ec=col, lw=1.5))
-    txt(c, 0.0, -3.0, r"optimal merge: $\Delta_{t'}\in\ker\Sigma_t$")
-    c.set_xlim(-3.6, 3.8); c.set_ylim(-3.6, 3.2); clean(c)
+    # ---- (b) optimal merge: Sigma-weighted, not Euclidean ------------------
+    b = ax[1]
+    SA = rot(8) @ np.diag([3.2, 0.30]) @ rot(8).T          # A certain along ~x
+    SB = rot(97) @ np.diag([3.0, 0.30]) @ rot(97).T        # B certain along ~y
+    wa, wb = np.array([-2.4, -1.1]), np.array([2.4, 1.15])
+    wbar = np.linalg.solve(SA + SB, SA @ wa + SB @ wb)     # exact Sigma-weighted merge
+    wmid = 0.5 * (wa + wb)                                  # Euclidean average
+    for S, c0, col in [(SA, wa, BLUE), (SB, wb, RED)]:
+        w_, V_ = np.linalg.eigh(S)
+        angS = np.degrees(np.arctan2(V_[1, -1], V_[0, -1]))
+        b.add_patch(Ellipse(c0, 2 * np.sqrt(w_[-1]), 2 * np.sqrt(w_[0]), angle=angS,
+                            fc=col, alpha=0.10, lw=0))
+        cov_ellipse(b, S, c0, 1.0, ec=col, lw=2.0)
+        cov_ellipse(b, S, c0, 1.7, ec=col, lw=1.2, alpha=0.45)
+    # joint-loss level set THROUGH the Euclidean average, centered at the optimum:
+    Stot = SA + SB
+    lvl = np.sqrt((wmid - wbar) @ Stot @ (wmid - wbar))
+    w_, V_ = np.linalg.eigh(np.linalg.inv(Stot))
+    angT = np.degrees(np.arctan2(V_[1, -1], V_[0, -1]))
+    b.add_patch(Ellipse(wbar, 2 * lvl * np.sqrt(w_[-1]), 2 * lvl * np.sqrt(w_[0]),
+                        angle=angT, fill=False, ec=BLACK, lw=1.6, ls="--"))
+    arrow(b, wa, wbar, BLUE, lw=2.2); arrow(b, wb, wbar, RED, lw=2.2)
+    b.plot(*wa, "o", color=BLUE, ms=8, zorder=6); b.plot(*wb, "o", color=RED, ms=8, zorder=6)
+    b.plot(*wbar, "*", color=GREEN, ms=24, zorder=7, mec=BLACK, mew=0.7)
+    b.plot(*wmid, "X", color=GREY, ms=13, zorder=7, mec=BLACK, mew=0.7)
+    txt(b, wa[0] + 0.35, wa[1] - 0.62, r"$\mathbf{w}_A^\ast$", color=BLUE, ha="left")
+    txt(b, wb[0] + 0.42, wb[1] - 0.72, r"$\mathbf{w}_B^\ast$", color=RED, ha="left")
+    b.annotate("Euclidean average", xy=wmid, xytext=(3.0, -1.55),
+               color=GREY, fontsize=FS, ha="left",
+               arrowprops=dict(arrowstyle="-", color=GREY, lw=1.1))
+    b.annotate(r"$\Sigma$-weighted optimum $\bar w^\ast$", xy=wbar,
+               xytext=(-2.4, 3.55), color=GREEN, fontsize=FS, ha="center",
+               arrowprops=dict(arrowstyle="-", color=GREEN, lw=1.1))
+    th = np.radians(250)                                    # bottom edge of the level set
+    edge = wbar + lvl * (np.cos(th) * np.sqrt(w_[-1]) * V_[:, -1]
+                         + np.sin(th) * np.sqrt(w_[0]) * V_[:, 0])
+    b.annotate(r"level set of $L_A{+}L_B$", xy=edge, xytext=(-4.4, -3.1),
+               fontsize=FS, ha="center",
+               arrowprops=dict(arrowstyle="-", color=BLACK, lw=1.1))
+    txt(b, 1.3, -3.6,
+        r"$\bar w^\ast=(\Sigma_A{+}\Sigma_B)^{-1}(\Sigma_A w_A^\ast{+}\Sigma_B w_B^\ast)$",
+        color=GREEN)
+    txt(b, -5.05, 1.45, r"$\Sigma_A$", color=BLUE, ha="left")
+    txt(b, 3.55, 2.85, r"$\Sigma_B$", color=RED, ha="left")
+    b.set_xlim(-5.7, 7.2); b.set_ylim(-4.2, 4.2); clean(b)
 
-    fig.text(0.025, 0.92, "(a)", fontsize=FS, fontweight="bold")
-    fig.text(0.355, 0.92, "(b)", fontsize=FS, fontweight="bold")
-    fig.text(0.685, 0.92, "(c)", fontsize=FS, fontweight="bold")
+    fig.text(0.03, 0.93, "(a)", fontsize=FS, fontweight="bold")
+    fig.text(0.525, 0.93, "(b)", fontsize=FS, fontweight="bold")
     fig.tight_layout(); fig.savefig("figures/thm_geometry.pdf", bbox_inches="tight"); plt.close(fig)
 
 

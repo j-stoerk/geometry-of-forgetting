@@ -217,7 +217,6 @@ if __name__ == "__main__":
     ax.axvline(0, color="#444", lw=1.0, zorder=1)
     ax.set_xlabel("Forgetting rate  (lower is better $\\rightarrow$)")
     ax.set_ylabel("Average accuracy  ($\\uparrow$ better)")
-    ax.set_title("Accuracy vs. forgetting on Rotated-Digits (exact A1)", fontsize=12, fontweight="bold")
     ax.set_xlim(0.245, -0.075)          # inverted: high forgetting left, room for labels right
     ax.set_ylim(0.665, 0.915)
     # legend: method class (colour) + a white star for our methods

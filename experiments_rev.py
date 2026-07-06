@@ -122,10 +122,8 @@ def exp_breakdown():
         ax[0].plot(lrs, corr[dp], "-o", ms=4, color=c, label=f"depth {dp}")
         ax[1].plot(lrs, relerr[dp], "-o", ms=4, color=c, label=f"depth {dp}")
     ax[0].set_ylabel("Pearson $r$ (predicted vs measured)")
-    ax[0].set_title("First-order fidelity vs step size", fontsize=9.5)
     ax[0].set_ylim(0, 1.02); ax[0].legend(fontsize=8)
     ax[1].set_ylabel("median relative error")
-    ax[1].set_title("Prediction error grows with depth, step", fontsize=9.5)
     ax[1].legend(fontsize=8)
     for a in ax:
         a.set_xlabel("learning rate (feature drift)")
@@ -256,13 +254,11 @@ def exp_benchmark(d=300, epochs=600, lr=0.3, seed=7, make_fig=True):
     ax[0].bar(xs, [out[m][0] for m in methods], color=cols)
     ax[0].set_xticks(xs); ax[0].set_xticklabels([labels[m] for m in methods], rotation=25, ha="right", fontsize=8)
     ax[0].set_ylabel("avg. final accuracy"); ax[0].set_ylim(0, 1.02)
-    ax[0].set_title("Retention across 5 tasks", fontsize=9.5)
     for i, m in enumerate(methods):
         ax[0].text(i, out[m][0] + 0.02, f"{out[m][0]:.2f}", ha="center", fontsize=7.5)
     ax[1].bar(xs, [out[m][1] for m in methods], color=cols)
     ax[1].set_xticks(xs); ax[1].set_xticklabels([labels[m] for m in methods], rotation=25, ha="right", fontsize=8)
     ax[1].set_ylabel("avg. forgetting (lower better)")
-    ax[1].set_title("Forgetting (frozen-feature, A1 exact)", fontsize=9.5)
     for i, m in enumerate(methods):
         ax[1].text(i, out[m][1] + 0.005, f"{out[m][1]:.2f}", ha="center", fontsize=7.5)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_benchmark.pdf"); plt.close(fig)
@@ -318,7 +314,6 @@ def exp_diagnostics(d=300):
     ax[0].scatter(pred, meas, s=40, color=BLUE)
     ax[0].set_xlabel(r"predicted $\frac{1}{2}\sum_c \Delta_c^\top \Sigma_A \Delta_c$")
     ax[0].set_ylabel("measured forgetting")
-    ax[0].set_title(f"Split-Digits, frozen features: $r={corr:.3f}$", fontsize=9.5)
     ax[0].set_xlim(0, lim); ax[0].set_ylim(0, lim)
     # spectrum of one task's Sigma
     w = np.linalg.eigvalsh(snap_S[0])[::-1]
@@ -331,7 +326,6 @@ def exp_diagnostics(d=300):
                    ha="left", va="center",
                    arrowprops=dict(arrowstyle="->", color=GREY, lw=0.9))
     ax[1].set_xlabel("index"); ax[1].set_ylabel(r"eigenvalue of $\Sigma_A$")
-    ax[1].set_title("Feature spectrum sets removable budget", fontsize=9.5)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_diagnostics.pdf"); plt.close(fig)
 
 
@@ -450,13 +444,11 @@ def exp_benchmark2(d=300, epochs=600, lr=0.3, angles=(0, 12, 24, 36, 48),
     ax[0].bar(xs, [out[m][0] for m in methods], color=cols)
     ax[0].set_xticks(xs); ax[0].set_xticklabels([labels[m] for m in methods], rotation=25, ha="right", fontsize=8)
     ax[0].set_ylabel("avg. final accuracy"); ax[0].set_ylim(0, 1.0)
-    ax[0].set_title("Rotated-Digits (similar tasks): retention", fontsize=9.5)
     for i, m in enumerate(methods):
         ax[0].text(i, out[m][0] + 0.015, f"{out[m][0]:.2f}", ha="center", fontsize=7.5)
     ax[1].bar(xs, [out[m][1] for m in methods], color=cols)
     ax[1].set_xticks(xs); ax[1].set_xticklabels([labels[m] for m in methods], rotation=25, ha="right", fontsize=8)
     ax[1].set_ylabel("avg. forgetting (lower better)")
-    ax[1].set_title(f"igfa shares aligned tasks (mean sim {np.mean(sims):.2f})", fontsize=9.5)
     for i, m in enumerate(methods):
         ax[1].text(i, out[m][1], f"{out[m][1]:.2f}", ha="center", va="bottom", fontsize=7.5)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_benchmark2.pdf"); plt.close(fig)
@@ -558,7 +550,6 @@ def exp_breakdown_fix():
         ax.text(i + w/2, r_avg[d] + 0.02, f"{r_avg[d]:.2f}", ha="center", fontsize=7.5)
     ax.set_xticks(xs); ax.set_xticklabels([f"depth {d}" for d in depths])
     ax.set_ylabel("Pearson $r$ (predicted vs measured)"); ax.set_ylim(0, 1.08)
-    ax.set_title(f"Segment-averaged curvature restores the identity (lr={lr})", fontsize=9.5)
     ax.legend(fontsize=9, loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_breakdown_fix.pdf", bbox_inches="tight"); plt.close(fig)
 

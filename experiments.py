@@ -129,21 +129,22 @@ def exp_interference_validation(d=24, rank=4, n_pairs=160):
     corr_nl = float(np.corrcoef(pred_nl, meas_nl)[0, 1])
     results["interference_nonlinear_corr"] = corr_nl
 
-    fig, ax = plt.subplots(1, 2, figsize=(8.6, 3.7))
-    for a, (p, m, ttl, sub) in zip(
+    # width-filling two-panel layout; panel descriptions live in the caption
+    fig, ax = plt.subplots(1, 2, figsize=(11.8, 4.4))
+    for a, (p, m, sub) in zip(
         ax,
-        [(pred, meas, "Linear head (frozen features): exact",
-          f"max rel. error $={rel_err_linear:.1e}$"),
-         (pred_nl, meas_nl, "Nonlinear net: first-order prediction",
-          f"Pearson $r={corr_nl:.3f}$")]):
+        [(pred, meas, f"max rel. error $={rel_err_linear:.1e}$"),
+         (pred_nl, meas_nl, f"Pearson $r={corr_nl:.3f}$")]):
         lim = max(p.max(), m.max()) * 1.05
-        a.plot([0, lim], [0, lim], color=GREY, lw=1, ls="--", zorder=0)
-        a.scatter(p, m, s=18, color=BLUE, alpha=0.8, edgecolor="none")
-        a.set_xlabel(r"predicted  $\frac{1}{2}\,\Delta^\top \Sigma_A \Delta$")
-        a.set_ylabel("measured forgetting of task A")
-        a.set_title(ttl, fontsize=9.5)
-        a.text(0.04, 0.92, sub, transform=a.transAxes, fontsize=9)
+        a.plot([0, lim], [0, lim], color=GREY, lw=1.2, ls="--", zorder=0)
+        a.scatter(p, m, s=30, color=BLUE, alpha=0.8, edgecolor="none")
+        a.set_xlabel(r"predicted  $\frac{1}{2}\,\Delta^\top \Sigma_A \Delta$", fontsize=12)
+        a.set_ylabel("measured forgetting of task A", fontsize=12)
+        a.tick_params(labelsize=10.5)
+        a.text(0.05, 0.91, sub, transform=a.transAxes, fontsize=12)
         a.set_xlim(0, lim); a.set_ylim(0, lim)
+    fig.text(0.015, 0.955, "(a)", fontsize=13, fontweight="bold")
+    fig.text(0.515, 0.955, "(b)", fontsize=13, fontweight="bold")
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_interference_validation.pdf"); plt.close(fig)
 
 
@@ -224,8 +225,6 @@ def exp_allocation_floor(d=24, rank=6):
     ax[0].plot(t, naive_B, color=RED, ls=":", label="task B — naive")
     ax[0].plot(t, alloc_B, color=GREEN, ls=":", label="task B — allocation")
     ax[0].set_xlabel("gradient steps on task B"); ax[0].set_ylabel("excess loss")
-    ax[0].set_title("Allocation relocates cost:\nirreversible forgetting $\\to$ deferred plasticity",
-                    fontsize=9.5)
     ax[0].legend(fontsize=7.2, loc="center right"); ax[0].set_ylim(bottom=-0.7)
 
     ax[1].plot(overlap, naive_f, "-o", color=RED, ms=4,
@@ -235,7 +234,6 @@ def exp_allocation_floor(d=24, rank=6):
                label="distortion floor (optimal merge)")
     ax[1].set_xlabel(r"feature-support overlap  $k/r$")
     ax[1].set_ylabel("loss")
-    ax[1].set_title("Interference is unavoidable iff supports overlap", fontsize=9.5)
     ax[1].legend(fontsize=7.0, loc="upper left")
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_allocation_floor.pdf"); plt.close(fig)
 
@@ -291,7 +289,6 @@ def exp_signchange(k=6, m=5, noise=0.6, lam=0.05, trials=600):
         ax.text(s_star + 0.03, ax.get_ylim()[1] * 0.62, fr"$s^\ast={s_star:.2f}$", fontsize=9)
     ax.set_xlabel(r"shared-target similarity  $s$")
     ax.set_ylabel("post-merge loss / benefit")
-    ax.set_title("Sign-change: share above $s^\\ast$, orthogonalize below", fontsize=9.5)
     ax.legend(fontsize=8.2, loc="upper right", frameon=True, framealpha=0.9,
               facecolor="white", edgecolor="none").set_zorder(5)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_signchange.pdf"); plt.close(fig)
@@ -337,7 +334,6 @@ def exp_capacity(rank=2, n_tasks=16, trials=16):
         ax.axvline(knee_vals[d], color=c, ls=":", lw=1)
     ax.set_xlabel("number of tasks in the stream  $T$")
     ax.set_ylabel("mean residual distortion")
-    ax.set_title(f"Capacity floor turns on at $T\\,r \\approx d$  ($r={rank}$)", fontsize=9.5)
     ax.legend(fontsize=8)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_capacity.pdf"); plt.close(fig)
 

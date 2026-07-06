@@ -109,7 +109,6 @@ def exp_dynamic_sstar():
     ax.plot(rhos, dynamic, "-^", ms=4, color=GREEN, label="dynamic (greedy validation, no tuning)")
     ax.set_xlabel(r"task-similarity persistence $\rho$")
     ax.set_ylabel("avg. population error")
-    ax.set_title("Validation-greedy self-calibration tracks the oracle", fontsize=9.5)
     ax.legend(fontsize=7.6)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_dynamic_sstar.pdf"); plt.close(fig)
 
@@ -156,12 +155,10 @@ def exp_multiclass_constants():
     ax[0].plot(Ks, b_emp, "o", color=BLUE, ms=6, label="empirical $\\max\\,G/H$")
     ax[0].axhline(b_form, color=RED, lw=1.6, label="$1/(2\\ln 2)$ (binary worst case)")
     ax[0].set_xlabel("number of classes/tasks $K$"); ax[0].set_ylabel("upper constant $b_K$")
-    ax[0].set_title("Tight upper bound $G\\leq b\\,H$, $K$-independent", fontsize=9.5)
     ax[0].legend(fontsize=8); ax[0].set_ylim(0.0, 0.9)
     ax[1].plot(Ks, a_emp, "s", color=GREEN, ms=6, label="empirical $\\min\\,G/H^2$")
     ax[1].plot(Ks, a_form, "-", color=RED, lw=1.6, label="$(1-1/K)/(\\ln K)^2$ (uniform)")
     ax[1].set_xlabel("number of classes/tasks $K$"); ax[1].set_ylabel("lower constant $a_K$")
-    ax[1].set_title("Tight lower bound $G\\geq a_K H^2$ is closed-form", fontsize=9.5)
     ax[1].legend(fontsize=8)
     fig.tight_layout(); fig.savefig(f"{FIGDIR}/fig_multiclass.pdf"); plt.close(fig)
 

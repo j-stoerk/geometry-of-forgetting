@@ -87,7 +87,5 @@ if __name__ == "__main__":
     ax.set_ylabel("realized gate gain over OGD  (avg. accuracy)")
     ax.set_xlim(-0.05, 0.68); ax.set_ylim(-0.015, 0.102)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.set_title("The gate's value is a measurable property of the stream",
-                 fontsize=12, fontweight="bold")
     fig.tight_layout(); fig.savefig("figures/fig_density.pdf", bbox_inches="tight")
     print("wrote figures/fig_density.pdf")

@@ -71,14 +71,13 @@ In the frozen-feature regime,
 forgetting from learning a new task is exactly the interference energy induced on the old task.
 In deep networks, the same quantity is recovered through path-averaged curvature with minimal additional forward passes.
 
-When task supports are disjoint, forgetting can be eliminated structurally.
-When they overlap in conflicting directions, a non-zero distortion floor is unavoidable.
+When task supports are disjoint, forgetting can be eliminated structurally and when task supports overlap in conflicting directions, a non-zero distortion floor is unavoidable.
 The same geometry optimally merges models through task-aware orthogonalization.
 
 From this analysis we derive Interference-Gated Functional
 Allocation (\IGFA), a replay-free, Fisher-free method that shares
 directions when tasks align and protects them when they conflict.
-Across benchmarks (CIFAR-100, Split-Digits, ImageNet-R), igfa achieves lossless retention when tasks are structurally
+Across benchmarks, igfa achieves lossless retention when tasks are structurally
 separable and moves unavoidable cost from irreversible forgetting into deferred but recoverable plasticity when they are not.
 It matches the strongest replay-free structural baselines on dissimilar-task streams and
 improves on unconditional projection when similarity makes transfer worth preserving.
@@ -121,11 +120,10 @@ knowledge}. This obliviousness is desirable when the training data are
 i.i.d., but harmful once the training distribution shifts over time in the continual
 setting. Standard approaches such as replay
 \cite{lopezpaz2017,chaudhry2019,buzzega2020}, elastic weight consolidation
-\cite{kirkpatrick2017,zenke2017}, and distillation \cite{li2017lwf} mitigate this
-effect after interference has occurred. Although effective, these methods are
-primarily corrective: replay requires data storage and raises privacy concerns,
-regularization constrains plasticity, and none directly characterizes when
-interference is unavoidable and when it can be eliminated.
+\cite{kirkpatrick2017,zenke2017}, and distillation \cite{li2017lwf} mostly repair forgetting after interference has already occurred.
+What is still missing is a predictive account of when interference is avoidable,
+when it is inevitable, and what structure an update must satisfy to retain
+old behavior without sacrificing useful transfer.
 
 This work focuses on the linear-on-features regime in which
 a frozen feature extractor $\phi(x)$ is paired with a trainable linear head,
@@ -143,8 +141,10 @@ extends approximately to deeper networks with feature drift.
 The paper makes three contributions.
 \begin{enumerate}[leftmargin=1.6em,itemsep=3pt]
 \item \textbf{Interference functional and removability.}
-Section~\ref{sec:theory} shows that forgetting is exactly the interference
-energy induced by a later update. The geometry of $\Sig_A$ penalizes only
+We derive an exact interference functional for forgetting.
+In the frozen-feature regime, forgetting is exactly the old task’s interference energy under the new update,
+which yields a clean criterion for when retention is lossless and when a distortion floor is unavoidable.
+The geometry of $\Sig_A$ penalizes only
 components in its active subspace, while updates in $\ker \Sig_A$ leave task
 $A$'s loss unchanged. This yields a structural criterion for lossless retention:
 interference is removable for disjoint task supports (reducing to ordinary
@@ -153,19 +153,19 @@ non-zero distortion floor. The same quantity also admits an
 information-theoretic interpretation through the task-inference problem.
 
 \item \textbf{Optimal merging as $\Sig$-orthogonalization.}
+We show that optimal merging is task-aware orthogonalization.
+This unifies offline model merging and online continual learning as batch and incremental solutions for minimizing the same interference objective.
 Section~\ref{sec:theory:merge} shows that post-merge loss decomposes into
 task-wise fit and cross-task interference. Minimizing this objective requires
 mutual $\Sig$-orthogonality of the task vectors, yielding the optimality
-condition for model merging and unifying offline merging and online continual
-learning as batch and incremental solutions to the same interference objective.
+condition for model merging.
 
 \item \textbf{Interference-Gated Functional Allocation.}
-Section~\ref{sec:algo} introduces \IGFA, an online method motivated by the same
-functional. \IGFA{} is replay-free and Fisher-free, stores only a low-rank
-summary of the occupied function subspace, shares capacity when tasks are
-sufficiently aligned, and orthogonalizes updates only when interference is
-predicted (Fig.~\ref{fig:overview}).
+We introduce igfa, a replay-free structural controller. The method shares capacity when tasks align, protects it when they conflict, and retains only a low-rank subspace summary.
+Section~\ref{sec:algo} introduces \IGFA, an online method motivated by the same functional (Fig.~\ref{fig:overview}).
 \end{enumerate}
+
+
 
 \begin{figure}[tb]\centering
 \includegraphics[width=\textwidth]{Subspace_Interference_and_Forgetting_Geometry}
@@ -272,13 +272,15 @@ the optimal merge together with the distortion floor (Sec.~\ref{sec:theory:merge
 
 \begin{figure}[tb]\centering
 \includegraphics[width=\textwidth]{thm_geometry}
-\caption{Geometry of the core identities. \emph{(a)} Forgetting is the interference
-energy $\tfrac12\Del^\top\Sig_A\Del$; only the component $\Del_\parallel\in\range
-\Sig_A$ costs forgetting, while $\Del_\perp\in\ker\Sig_A$ is free
-(Theorem~\ref{thm:functional}). \emph{(b)} For general architectures the input
-covariance is replaced by the path-averaged curvature $\bar H_A$ along the segment
-$w_A\!\to\!w_B$ (Theorem~\ref{thm:general}). \emph{(c)} Optimal merging makes the
-task vectors mutually $\Sig$-orthogonal (Theorem~\ref{thm:merge}).}
+\caption{Geometry of the general identities. \emph{(a)} Beyond frozen features the
+quadratic form survives with $\Sig_A$ replaced by the path-averaged curvature
+$\bar H_A$: the local curvature of $L_A$ rotates and rescales along the segment
+$w_A\!\to\!w_B$ (ellipses, blue$\to$red), earlier points weighted by $(1-t)$ (wedge),
+and the straight chord stands in for the drifted geodesic (dashed)
+(Theorem~\ref{thm:general}). \emph{(b)} Optimal merging is $\Sig$-weighted, not
+Euclidean: drawn from the exact $2{\times}2$ geometry, the joint optimum $\bar w^\ast$
+(star) minimizes $L_A{+}L_B$, while the Euclidean average (cross) sits strictly outside
+the optimum's level set and pays avoidable interference (Theorem~\ref{thm:merge}).}
 \label{fig:thmgeom}
 \end{figure}
 
@@ -336,7 +338,7 @@ is unchanged before and after learning $B$.
 $\Del_\perp\in\ker\Sig_A$ and $\Del_\parallel\in\range\Sig_A$. Then $\Del L_A=
 \tfrac12\Del_\parallel^\top\Sig_A\Del_\parallel$, so only the component of the update
 lying in task $A$'s active subspace contributes to forgetting
-(Fig.~\ref{fig:thmgeom}a).
+(Fig.~\ref{fig:overview}, left).
 
 \begin{corollary}[Removability dichotomy]
 \label{cor:removability}
@@ -403,7 +405,7 @@ collapses to the fixed-curvature matrix $\Sig_A$ by Theorem~\ref{thm:functional}
 For squared loss,
 $\nabla^2 L_A(w)=\mathbb{E}_{\mathcal D_A}[J_w J_w^\top]+R(w)$, so $\bar H_A$ is a
 path-averaged Gauss--Newton geometry, where $J_w=\partial f(x;w)/\partial w$ is the
-parameter Jacobian and $R(w)$ is a residual-curvature term (Fig.~\ref{fig:thmgeom}b).
+parameter Jacobian and $R(w)$ is a residual-curvature term (Fig.~\ref{fig:thmgeom}a).
 The removability, merging, and floor results therefore extend by replacing $\Sig_A$
 with $\bar H_A$. In practice, $\bar H_A$ can be estimated from a small number of
 evaluations of $L_A$ along the segment, without forming the Hessian explicitly. This principle motivates
@@ -500,7 +502,7 @@ the two-task case.
 
 \noindent The relevant inner product for merging is therefore the task-dependent
 $\Sig_t$-metric
-(Fig.~\ref{fig:thmgeom}c); Euclidean orthogonality is the white-feature special case
+(Fig.~\ref{fig:thmgeom}b); Euclidean orthogonality is the white-feature special case
 $\Sig_t\propto I$. The same residual $\mathcal{D}$ also governs the online
 continual-learning setting, so merging and continual learning optimize the same
 functional under batch and streaming schedules.
@@ -763,12 +765,12 @@ $r>0.9999$. In the frozen-feature regime,
 forgetting is the same quantity as interference energy.
 
 \begin{figure}[tb]\centering
-\includegraphics[width=0.82\textwidth]{fig_interference_validation}
+\includegraphics[width=\textwidth]{fig_interference_validation}
 \caption{The interference functional \emph{is} the forgetting. Measured
 backward-forgetting of task $A$ after learning task $B$ against the predicted energy
-$\tfrac12\Del^\top\Sig_A\Del$. \emph{Left:} a linear head on frozen
-features---identity to machine precision. \emph{Right:} a nonlinear network, with the
-prediction formed from the last-layer feature covariance---first-order agreement,
+$\tfrac12\Del^\top\Sig_A\Del$. \emph{(a)} A linear head on frozen features: the
+identity is exact to machine precision. \emph{(b)} A nonlinear network, with the
+prediction formed from the last-layer feature covariance: first-order agreement,
 Pearson $r>0.9999$. The dashed line is $y=x$.}
 \label{fig:functional}
 \end{figure}
@@ -1107,24 +1109,22 @@ sense, the functional plays the same conceptual role here that the NTK \cite{jac
 played for generalization: it provides a geometry and a set of computable quantities in
 place of heuristics.
 
-\paragraph{A map of the claims.} The results span four evidential tiers.
-\emph{(I) Exact.} In frozen-feature/PEFT
-settings (A1) and, architecture-free, in function space
-(Theorem~\ref{thm:funcspace}): the interference identity, the removability dichotomy, the
+\paragraph{A map of the claims.} The paper makes three kinds of claims.  Some are
+\emph{(I) exact} in frozen-feature or function-space regime (the interference identity, the removability dichotomy, the
 $\Sig$-orthogonal optimal merge, the distortion floor, and continuous-time exact
-retention---for squared loss and, in Bregman form, for the full canonical loss family
-including cross-entropy, where the energy is a KL divergence and the floor a weighted
-Jensen--Shannon divergence (Sec.~\ref{si:beyond}). \emph{(II) Exact-with-quantified-residual.} End-to-end parameter-space
+retention, Sec.~\ref{si:beyond}). \emph{Exact-with-quantified-residual}: end-to-end parameter-space
 retention, exact up to the basis error of Proposition~\ref{prop:esterror} and the
-finite-step remainder of Theorem~\ref{thm:general}, both measured. \emph{(III)
-Empirically supported.} The multi-seed benchmark results---Split-Digits, Rotated-Digits,
+finite-step remainder of Theorem~\ref{thm:general}, both measured. Some are  \emph{(III)
+empirically supported} and remain exact up to measured approximation terms under end-to-end training (the multi-seed benchmark results, Split-Digits, Rotated-Digits,
 the frozen-ViT streams, and the threshold-free gate's real-text gain over naive
-fine-tuning---which are measured, not proved. \emph{(IV) Mechanism probes and
+fine-tuning). \emph{(IV) Mechanism probes and
 conjectures.} The generality extensions (federated merging, out-of-distribution and
 task-free signals, physics-informed constraints, Fisher-metric policy gradients,
 meta-learning, memory-and-control instances) are exact-regime proof-of-concepts
 labelled in the Supporting Information as \emph{proved-in-A1}, \emph{empirical mechanism
 probe}, or \emph{forward-looking conjecture}.
+
+ and some are empirical demonstrations of the mechanism at benchmark and language-model scale. Keeping these tiers separate clarifies both what is proved and what is shown experimentall
 
 \paragraph{Forgetting decomposes into incompatibility, capacity, and control.} The
 results above assemble into an attribution identity. Writing $\mathcal{D}^\star_\infty$
