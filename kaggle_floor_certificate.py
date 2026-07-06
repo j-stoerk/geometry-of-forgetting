@@ -14,9 +14,16 @@
 #  expected to certify floor <= a few 1e-2 nats/token -- turning
 #  "avoidable in principle" into a measured statement.
 #
-#  Needs: attr_ckpts_v2/<model>/single_r8_d{0..3}_s0.pt (from the v2
-#  run).  If the checkpoints are gone, set RETRAIN=True: it retrains
-#  the four single-domain LoRAs (r=8, 1 seed) first (~35 min/model).
+#  Also measures the SEED-TO-SEED KL BASELINE (same-domain s0-vs-s1
+#  adapters): two independently trained models differ in KL with zero
+#  forgetting, so this offset is subtracted from the joint/sequential
+#  KL terms of the attribution.
+#
+#  Checkpoints: looks in ./attr_ckpts_v2/ AND in any attached Kaggle
+#  input (attach the v2 notebook's output as a dataset to reuse its
+#  ckpts).  Anything missing is RETRAINED AUTOMATICALLY (~3 min per
+#  adapter at 410m, ~7 min at 1b; 8 adapters per model worst case)
+#  and cached, so the script runs from scratch in a fresh session.
 # =====================================================================
 import json, os, random, time
 import numpy as np
@@ -25,7 +32,6 @@ import torch.nn as nn
 
 MODELS = ["EleutherAI/pythia-410m", "EleutherAI/pythia-1b"]
 CKPT_DIR = "attr_ckpts_v2"
-RETRAIN = False
 RANK, STEPS, BS, SEQ, LR, CACHE_CH = 8, 250, 8, 128, 1e-4, 6
 DEV = "cuda:0" if torch.cuda.is_available() else "cpu"
 T0 = time.time()
@@ -127,6 +133,52 @@ def token_kl_between(model, loras, st_old, st_new, chunks, device):
     return tot / max(ntok, 1)
 
 
+def find_ckpt(key, fname):
+    """Look for a saved adapter in the local dir and in any attached Kaggle
+    dataset (attach the v2 notebook's output as an input to reuse its ckpts)."""
+    import glob
+    cands = [os.path.join(CKPT_DIR, key, fname)]
+    cands += glob.glob(f"/kaggle/input/*/attr_ckpts_v2/{key}/{fname}")
+    cands += glob.glob(f"/kaggle/input/*/{key}/{fname}")
+    for c in cands:
+        if os.path.exists(c):
+            return c
+    return None
+
+
+def get_single_state(model, loras, doms, key, t, seed):
+    """Adapter state for single-domain t, seed: load if found, else RETRAIN
+    (~3 min at 410m, ~7 min at 1b) and cache locally."""
+    fname = f"single_r{RANK}_d{t}_s{seed}.pt"
+    ck = find_ckpt(key, fname)
+    if ck is not None:
+        st = read_ckpt(ck, len(loras), DEV)
+        log(f"[{key}] loaded {ck}")
+        return st
+    log(f"[{key}] ckpt {fname} not found -- retraining (seed {seed})")
+    random.seed(seed); torch.manual_seed(seed)
+    with torch.no_grad():
+        for l in loras:
+            l.A.zero_(); nn.init.normal_(l.B, std=1e-6)
+    params = [p for l in loras for p in (l.A, l.B)]
+    opt = torch.optim.AdamW(params, lr=LR, eps=1e-6, weight_decay=0.0)
+    model.train()
+    tr = doms[t][0]
+    for _ in range(STEPS):
+        i = random.randint(0, len(tr) - BS)
+        b = tr[i:i + BS].to(DEV)
+        loss = model(b, attention_mask=torch.ones_like(b), labels=b).loss
+        if not torch.isfinite(loss): raise ValueError("non-finite loss in retrain")
+        opt.zero_grad(set_to_none=True); loss.backward()
+        torch.nn.utils.clip_grad_norm_(params, 0.5); opt.step()
+    model.eval()
+    st = lora_state(loras)
+    out = os.path.join(CKPT_DIR, key, fname)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    torch.save([(a.cpu(), b.cpu()) for a, b in st], out)
+    return st
+
+
 if __name__ == "__main__":
     from transformers import AutoTokenizer
     results = {}
@@ -138,46 +190,12 @@ if __name__ == "__main__":
         model, loras = build_model(model_name, DEV)
         model.eval()
         T = len(doms)
-        # per-domain per-chunk CE under each single-domain model: (T_models, T_doms, n_chunks)
+        # single-domain adapter states, seed 0 (load or retrain)
+        states0 = [get_single_state(model, loras, doms, key, t, 0) for t in range(T)]
+        # per-domain per-chunk CE under each single-domain model
         CE = [[None] * T for _ in range(T)]
         for t in range(T):
-            ck = os.path.join(CKPT_DIR, key, f"single_r8_d{t}_s0.pt")
-            if os.path.exists(ck):
-                sd = torch.load(ck, map_location=DEV)
-                # accept: list of (A,B) tuples, or a dict of tensors whose sorted
-                # keys pair up as (A,B) per layer (covers the common save formats)
-                if isinstance(sd, (list, tuple)):
-                    st = [(a, b) for a, b in sd]
-                elif isinstance(sd, dict):
-                    ks = sorted(sd.keys())
-                    a_keys = [k for k in ks if k.endswith("A") or ".A" in k or "lora_A" in k]
-                    b_keys = [k for k in ks if k.endswith("B") or ".B" in k or "lora_B" in k]
-                    if len(a_keys) == len(loras) and len(b_keys) == len(loras):
-                        st = list(zip((sd[k] for k in a_keys), (sd[k] for k in b_keys)))
-                    else:
-                        raise ValueError(f"unrecognized ckpt format: {ck}; keys {ks[:4]}...")
-                else:
-                    raise ValueError(f"unrecognized ckpt type in {ck}: {type(sd)}")
-                load_lora(loras, [(a.to(DEV).float(), b.to(DEV).float()) for a, b in st])
-                log(f"[{key}] loaded {ck}")
-            elif RETRAIN:
-                log(f"[{key}] retraining single-domain d{t}")
-                for l in loras:                              # reset adapters
-                    with torch.no_grad():
-                        l.A.zero_(); nn.init.normal_(l.B, std=1e-6)
-                params = [p for l in loras for p in (l.A, l.B)]
-                opt = torch.optim.AdamW(params, lr=LR, eps=1e-6, weight_decay=0.0)
-                model.train(); random.seed(0)
-                tr = doms[t][0]
-                for _ in range(STEPS):
-                    i = random.randint(0, len(tr) - BS)
-                    b = tr[i:i + BS].to(DEV)
-                    loss = model(b, attention_mask=torch.ones_like(b), labels=b).loss
-                    opt.zero_grad(set_to_none=True); loss.backward()
-                    torch.nn.utils.clip_grad_norm_(params, 0.5); opt.step()
-                model.eval()
-            else:
-                raise FileNotFoundError(f"{ck} missing; set RETRAIN=True")
+            load_lora(loras, states0[t])
             for dom in range(T):
                 CE[t][dom] = chunk_ce(model, doms[dom][1], DEV)
         # generative classifier: p(T=t|x) propto exp(-SEQ * CE_t(x)) (uniform prior)
@@ -200,18 +218,14 @@ if __name__ == "__main__":
         # subtracted from the joint/sequential KL terms of the attribution.
         base_kls = []
         for t in range(T):
-            c0 = os.path.join(CKPT_DIR, key, f"single_r8_d{t}_s0.pt")
-            c1 = os.path.join(CKPT_DIR, key, f"single_r8_d{t}_s1.pt")
-            if os.path.exists(c0) and os.path.exists(c1):
-                st0 = read_ckpt(c0, len(loras), DEV)
-                st1 = read_ckpt(c1, len(loras), DEV)
-                anchors = doms[t][2]
-                base_kls.append(token_kl_between(model, loras, st0, st1, anchors, DEV))
-        if base_kls:
-            results[key]["seed_baseline_kl"] = float(np.mean(base_kls))
-            log(f"[{key}] seed-to-seed KL baseline (same domain, s0 vs s1): "
-                f"{np.mean(base_kls):.4f} nats/token -- subtract from joint/seq KL "
-                f"terms to net out the two-models offset")
+            st1 = get_single_state(model, loras, doms, key, t, 1)
+            anchors = doms[t][2]
+            base_kls.append(token_kl_between(model, loras, states0[t], st1, anchors, DEV))
+        results[key]["seed_baseline_kl"] = float(np.mean(base_kls))
+        results[key]["seed_baseline_per_domain"] = [float(x) for x in base_kls]
+        log(f"[{key}] seed-to-seed KL baseline (same domain, s0 vs s1): "
+            f"{np.mean(base_kls):.4f} nats/token -- subtract from joint/seq KL "
+            f"terms to net out the two-models offset")
         del model
         if torch.cuda.is_available(): torch.cuda.empty_cache()
     with open("floor_certificate_results.json", "w") as f:
