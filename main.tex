@@ -651,30 +651,65 @@ removes (see Algorithm~1).
 
 \begin{figure}[tb]\centering
 \fbox{\begin{minipage}{0.95\textwidth}\small
-\textbf{Algorithm~1: Interference-Gated Functional Allocation (\IGFA).}\\[2pt]
-\textbf{State:} orthonormal subspace summary $U\in\R^{d\times k}$ (empty); similarity
-threshold $\sstar$; rank cap $k_{\max}$; per-task bases $\{B_t\}$.\\[2pt]
-\textbf{For each task} $n$ with gradient stream $g$ and feature second-moment estimate
-$\widehat\Sig_n$:
+\textbf{Algorithm~1: the interference-ledger loop (measure $\to$ attribute $\to$ act),
+with \IGFA{} as its default control instance.}\\[2pt]
+\textbf{State (one object):} tracked second moment $\widehat\Sig$ (or its
+Frequent-Directions sketch); per-task bases $\{B_t\}$ with rank cap $k_{\max}$;
+held-out micro-cache gradients $\{\nabla L_u\}$. Every quantity below is a read-out
+of this state.\\[2pt]
+\textbf{For each task} $n$ (gradient stream $g$, feature second-moment estimate
+$\widehat\Sig_n$; $B_n\leftarrow$ top-$r$ eigenvectors, streaming PCA):
 \begin{enumerate}[leftmargin=1.5em,itemsep=0pt]
-\item $B_n\leftarrow$ top-$r$ eigenvectors of $\widehat\Sig_n$ (streaming PCA).
-\item \textbf{Build protect set} $Q$: collect $B_t$ for every past task with overlap
-$\mathrm{sim}(B_t,B_n)=\|B_t^\top B_n\|_F^2/r<\sstar$ (conflicting); orthonormalize to
-$Q$. (Aligned past tasks, $\mathrm{sim}\ge\sstar$, are left \emph{shared}.)
-\item \textbf{Gated update:} for each minibatch, $g\leftarrow(I-QQ^\top)\,g$, then
-$w\leftarrow w-\eta\,g$.
-\item \textbf{Grow} $U\leftarrow\mathrm{orth}([\,U\ B_n\,])$; if
-$\mathrm{rank}(U)>k_{\max}$, drop the smallest-eigenvalue direction
-(rate--distortion-graceful forgetting).
+\item \textbf{Measure:} overlaps $\mathrm{sim}(B_t,B_n)=\|B_t^\top B_n\|_F^2/r$, share
+density, predicted floor, occupied rank, drift velocity, OOD ratio, estimator
+confidence.
+\item \textbf{Attribute} the predicted loss: floor (irreducible) $/$ capacity (rank cap
+binding) $/$ control (the rest)---each term is measurable and has exactly one remedy
+(Sec.~\ref{sec:discussion}).
+\item \textbf{Act:} \emph{skip} if OOD; \emph{expand or drop} the smallest-eigenvalue
+direction if the cap binds (rate--distortion-graceful); \emph{replay} where recoverable
+excess per exemplar is largest; otherwise the \textbf{gated update}: per minibatch
+solve the monotone-retention QP of Corollary~\ref{cor:qpgate},
+$v=\operatorname{argmin}\|v+g\|^2$ subject to the chosen constraint rows, and step
+$w\leftarrow w+\eta\,v$. \IGFA's default rows: equality constraints from every past
+basis with $\mathrm{sim}(B_t,B_n)<\sstar$ (conflicting), aligned tasks left shared---%
+equivalently $g\leftarrow(I-QQ^\top)g$ with $Q=\mathrm{orth}$ of the conflicting bases.
+\item \textbf{Update state:} fold the batch into $\widehat\Sig$; grow the basis store;
+refresh micro-caches; \emph{defer} (protect-all) while confidence is low.
 \end{enumerate}
 \textbf{Inference:} single forward pass through $w$ (plus a task router only in the
 class-incremental case; Sec.~\ref{sec:theory:ceiling}).
 \end{minipage}}
 \end{figure}
 
-\paragraph{Complexity.} The only persistent state is $U$ together with the per-task
-bases, giving $\mathcal{O}(dk)$ memory with $k\le k_{\max}$, independent of the number
-of stored examples and of dataset size. This contrasts with $\mathcal{O}(|\mathcal B|d)$
+\paragraph{One gate, many methods.} Step 3's QP is not one design choice among many:
+every protection rule in this literature is the \emph{same} program under a different
+constraint set, and the reference implementation is a single function
+(\texttt{evaluate\_unified\_gate.py}, all recoveries machine-checked):
+\begin{center}\small
+\begin{tabular}{ll}
+\toprule
+constraint rows & recovered method \\
+\midrule
+none & naive sharing \\
+one sampled $\nabla L_u$ (inequality) & A-GEM / the threshold-free sign gate \\
+all stored $\nabla L_u$ (inequalities) & the active-set gate (Sec.~\ref{si:beyond}) \\
+all protected bases (equalities) & \OGD{}/\textsc{gpm} projection \\
+bases with $\mathrm{sim}<\sstar$ only (equalities) & \IGFA's threshold gate \\
+\bottomrule
+\end{tabular}
+\end{center}
+The recoveries are exact rather than analogies: the closed-form sign gate and \OGD{}
+agree with the QP to $10^{-15}$, and \IGFA's full training trajectory coincides with
+the overlap-filtered-equality instance step for step ($10^{-15}$ over five tasks). The
+methods differ only in which rows they enforce and how well those rows are estimated,
+which is precisely the axis the scale experiments measure (Sec.~\ref{si:llm}).
+
+\paragraph{Complexity, and one state object.} The only persistent state is the triple
+of Algorithm~1---the tracked second moment (or its sketch), the per-task bases, and the
+held-out micro-caches---giving $\mathcal{O}(dk)$ memory with $k\le k_{\max}$,
+independent of the number of stored examples and of dataset size. This contrasts with
+$\mathcal{O}(|\mathcal B|d)$
 memory for a replay buffer $\mathcal B$, and with $\mathcal{O}(d)$ to $\mathcal{O}(d^2)$
 memory for diagonal-to-full Fisher methods. Per update, the projection costs
 $\mathcal{O}(dk)$, essentially a $k$-dimensional inner product and subtraction, and is
@@ -685,7 +720,14 @@ $U$ remains small in absolute terms. The rank cap $k_{\max}$ is the capacity bud
 Sec.~\ref{sec:exp:simcap}: when it binds, the discarded direction is the least excited
 one, which bounds the induced forgetting by its eigenvalue. At scale, the covariance
 tracking itself can be replaced by an $\mathcal{O}(rd)$ Frequent-Directions sketch with
-no $d\times d$ eigendecomposition (Sec.~\ref{si:cheapgn}).
+no $d\times d$ eigendecomposition (Sec.~\ref{si:cheapgn}). Because every quantity in
+this paper---overlaps and $\sstar$, the QP constraint rows, the quadratic and KL/JSD
+floors, the OOD ratio, drift velocity, and capacity occupancy---is a read-out of this
+one state object, its failure modes are unified rather than method-specific: a stale
+estimate announces itself through the drift velocity, small-sample floor estimates are
+bias-corrected and \emph{abstain} when a null test cannot rule out zero conflict, and
+constraint anchors must be held-out and adequately sized, since a train-anchored gate
+provably protects memorized noise as if it were knowledge (Sec.~\ref{si:beyond}).
 
 \paragraph{Relation to \OGD{}/\textsc{gpm}.} Setting $\sstar=\infty$, so that all past
 subspaces are protected, recovers orthogonal projection \cite{farajtabar2020,saha2021}
