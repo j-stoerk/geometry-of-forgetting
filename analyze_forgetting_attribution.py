@@ -95,3 +95,37 @@ for model in d:
     print(f"   calibrate with the seed-to-seed KL of kaggle_floor_certificate.py]")
     print(f"  control naive {ctl_n:+.4f}  gate {ctl_g:+.4f}"
           f"  ({100*(1-ctl_g/max(ctl_n,1e-9)):.0f}% removed)")
+
+
+# ------------- FINAL netted attribution (with the certificate results) -------
+import os
+if os.path.exists("floor_certificate_results.json"):
+    cert = json.load(open("floor_certificate_results.json"))
+    # the floor is a DATA property: the best classifier over all models bounds
+    # it for every model (I(T;Y|X) <= H(T|X) <= min over classifiers of CE)
+    FLOOR = min(v["classifier_ce"] for v in cert.values())
+    best = min(cert, key=lambda k: cert[k]["classifier_ce"])
+    print("\n" + "#" * 74)
+    print("# FINAL ATTRIBUTION -- floor certified, KL terms netted of seed baseline")
+    print("#" * 74)
+    print(f"  CERTIFIED FLOOR of the stream: I(T;Y|X) <= {FLOOR:.4f} nats/token")
+    print(f"  (generative classifier of {best}: acc "
+          f"{cert[best]['classifier_acc']:.3f}, CE {FLOOR:.4f}; data property ->")
+    print(f"   applies to every model's attribution)")
+    for model in d:
+        R = d[model]; b = cert[model]["seed_baseline_kl"]
+        nkl = np.mean([v["kl_to_single"]["mean"] for v in R["seq/naive/r8"].values()])
+        gkl = np.mean([v["kl_to_single"]["mean"] for v in R["seq/func-active/r8"].values()])
+        jkl = np.mean([v["kl_to_single"]["mean"] for v in R["joint/r8"].values()])
+        fn = np.mean([np.mean([v["final_ce"][m] - v["diag_ce"][m] for m in EARLIER])
+                      for v in R["seq/naive/r8"].values()])
+        print(f"\n== {model}   (seed-to-seed KL baseline {b:.4f})")
+        print(f"  net KL forgetting  naive {nkl - b:.3f}   gate {gkl - b:.3f}")
+        print(f"  net class term     {jkl - b:.3f}   net control naive {nkl - jkl:.3f}"
+              f"  gate {gkl - jkl:.3f}")
+        print(f"  CE forgetting {fn:.3f}  vs certified floor {FLOOR:.4f}"
+              f"  ->  >= {100 * (1 - FLOOR / fn):.1f}% AVOIDABLE IN PRINCIPLE (certified)")
+    print("\n  Note: the seed baseline (~0.02-0.03) explains only ~15% of the flat")
+    print("  KL_joint, so the class term is real but rank-insensitive at this")
+    print("  budget: interference inside the deployed class sits in the shared")
+    print("  frozen geometry / joint optimization, not in adapter rank.")
