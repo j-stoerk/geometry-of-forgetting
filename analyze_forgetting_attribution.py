@@ -73,3 +73,25 @@ the Bregman residual term.  Floor certification pending the generative
 classifier (kaggle_floor_certificate.py).  Caveat: LR fixed at 1e-4 across
 scales; the 410m->1b comparison is at fixed hyperparameters, not per-scale
 tuned.""")
+
+
+# ------------------------- KL view (the v2 protocol's primary observable) ----
+print("\n" + "#" * 74)
+print("# KL ATTRIBUTION (anchored per-token KL to single-domain references)")
+print("#" * 74)
+for model in d:
+    R = d[model]
+    jkl = {r: np.array([v["kl_to_single"]["mean"] for v in R[f"joint/r{r}"].values()])
+           for r in RANKS}
+    nkl = np.array([v["kl_to_single"]["mean"] for v in R["seq/naive/r8"].values()])
+    gkl = np.array([v["kl_to_single"]["mean"] for v in R["seq/func-active/r8"].values()])
+    p = stats.ttest_rel(nkl, gkl).pvalue
+    ctl_n, ctl_g = nkl.mean() - jkl[8].mean(), gkl.mean() - jkl[8].mean()
+    print(f"\n== {model}")
+    print(f"  naive KL {nkl.mean():.4f}+/-{nkl.std():.4f}   gate {gkl.mean():.4f}+/-"
+          f"{gkl.std():.4f}  (paired p={p:.4f}, removed {nkl.mean()-gkl.mean():+.4f})")
+    print(f"  KL_joint(r): " + "  ".join(f"r={r}: {jkl[r].mean():.4f}" for r in RANKS)
+          + "   [FLAT in r -> substantially a two-models baseline, not capacity;")
+    print(f"   calibrate with the seed-to-seed KL of kaggle_floor_certificate.py]")
+    print(f"  control naive {ctl_n:+.4f}  gate {ctl_g:+.4f}"
+          f"  ({100*(1-ctl_g/max(ctl_n,1e-9)):.0f}% removed)")

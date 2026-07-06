@@ -76,7 +76,8 @@ def get_domains(tok):
     for name, t in texts:
         enc = tok(t, return_tensors="pt").input_ids[0]
         ch = enc[: (len(enc) // SEQ) * SEQ].view(-1, SEQ)
-        out.append((ch[:110], ch[110:130]))                 # (train, heldout)
+        tr = ch[:110]; te = ch[110:134]; an = ch[134:142]   # v2 splits: 110/24/8
+        out.append((tr, te, an))
     return out
 
 
@@ -98,6 +99,32 @@ def lora_state(loras): return [(l.A.detach().clone(), l.B.detach().clone()) for 
 def load_lora(loras, st):
     with torch.no_grad():
         for l, (A, B) in zip(loras, st): l.A.copy_(A); l.B.copy_(B)
+
+
+def read_ckpt(path, n_layers, device):
+    sd = torch.load(path, map_location="cpu")
+    if isinstance(sd, (list, tuple)):
+        st = list(sd)
+    else:
+        st = [(sd[f"{i}.A"], sd[f"{i}.B"]) for i in range(n_layers)]
+    return [(a.to(device).float(), b.to(device).float()) for a, b in st]
+
+
+@torch.no_grad()
+def token_kl_between(model, loras, st_old, st_new, chunks, device):
+    """Mean per-token KL(p_old || p_new) on chunks, swapping adapters per batch."""
+    tot, ntok = 0.0, 0
+    for i in range(0, len(chunks), 2):
+        b = chunks[i:i + 2].to(device)
+        load_lora(loras, st_old)
+        lp0 = nn.functional.log_softmax(
+            model(b, attention_mask=torch.ones_like(b)).logits[:, :-1].float(), -1)
+        load_lora(loras, st_new)
+        lp1 = nn.functional.log_softmax(
+            model(b, attention_mask=torch.ones_like(b)).logits[:, :-1].float(), -1)
+        tot += float((lp0.exp() * (lp0 - lp1)).sum())
+        ntok += int(lp0.shape[0] * lp0.shape[1])
+    return tot / max(ntok, 1)
 
 
 if __name__ == "__main__":
@@ -168,6 +195,23 @@ if __name__ == "__main__":
                             ce_90pct=float(ce_all.quantile(0.9)))
         log(f"[{key}] FLOOR CERTIFICATE: I(T;Y|X) <= H(T|X) <= {ce_all.mean():.4f} "
             f"nats/token  (classifier acc {acc:.3f}; 90th pct {ce_all.quantile(0.9):.4f})")
+        # ---- seed-to-seed KL baseline: two independently trained models of the
+        # SAME domain differ in KL with zero forgetting -- this offset should be
+        # subtracted from the joint/sequential KL terms of the attribution.
+        base_kls = []
+        for t in range(T):
+            c0 = os.path.join(CKPT_DIR, key, f"single_r8_d{t}_s0.pt")
+            c1 = os.path.join(CKPT_DIR, key, f"single_r8_d{t}_s1.pt")
+            if os.path.exists(c0) and os.path.exists(c1):
+                st0 = read_ckpt(c0, len(loras), DEV)
+                st1 = read_ckpt(c1, len(loras), DEV)
+                anchors = doms[t][2]
+                base_kls.append(token_kl_between(model, loras, st0, st1, anchors, DEV))
+        if base_kls:
+            results[key]["seed_baseline_kl"] = float(np.mean(base_kls))
+            log(f"[{key}] seed-to-seed KL baseline (same domain, s0 vs s1): "
+                f"{np.mean(base_kls):.4f} nats/token -- subtract from joint/seq KL "
+                f"terms to net out the two-models offset")
         del model
         if torch.cuda.is_available(): torch.cuda.empty_cache()
     with open("floor_certificate_results.json", "w") as f:
