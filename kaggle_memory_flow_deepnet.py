@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-SCRIPT_VERSION = "memflow-deep-exact-logged-v1"
+SCRIPT_VERSION = "memflow-deep-exact-logged-v2-maskedTIL-tracenorm"
 DEV = "cuda:0" if torch.cuda.is_available() else "cpu"
 if DEV.startswith("cuda") and torch.cuda.get_device_capability(0) < (7, 0):
     raise SystemExit("Unsupported GPU (sm<70): set Accelerator to 'GPU T4 x2'.")
@@ -324,19 +324,63 @@ class KFACAnchorMetric:
 
         raise RuntimeError(f"_top_eig failed after GPU and CPU fallback: {last_err}")
 
+    @staticmethod
+    def _trace_normalize(cov: torch.Tensor) -> torch.Tensor:
+        """Scale a factor to unit MEAN eigenvalue (trace/dim = 1).  This makes eps
+        a scale-invariant relative-damping knob for BOTH factors: without it the
+        output-gradient factor G -- whose raw scale depends on the loss reduction
+        (mse-mean divides grads by batch*classes) -- has eigenvalues ~1e-6 << eps,
+        so (G+eps I)^{-1} degenerates to pure 1/eps scaling and contributes no
+        directional protection.  The already-saturated A factor is essentially
+        unchanged (its top eigenvalues stay >> eps after normalization)."""
+        d = cov.shape[0]
+        tr = torch.trace(cov)
+        return cov * (d / (tr + 1e-12)) if tr > 0 else cov
+
     def _make_factor_state(self, A: Dict[str, torch.Tensor], G: Dict[str, torch.Tensor]) -> FactorState:
         return FactorState(
             A=A,
             G=G,
-            A_eig={name: self._top_eig(cov, self.rank_a) for name, cov in A.items()},
-            G_eig={name: self._top_eig(cov, self.rank_g) for name, cov in G.items()},
+            A_eig={name: self._top_eig(self._trace_normalize(cov), self.rank_a)
+                   for name, cov in A.items()},
+            G_eig={name: self._top_eig(self._trace_normalize(cov), self.rank_g)
+                   for name, cov in G.items()},
         )
+
+    @staticmethod
+    def _safe_eigvalsh(cov: torch.Tensor) -> torch.Tensor:
+        M = cov.detach().float()
+        M = 0.5 * (M + M.T)
+        if not torch.isfinite(M).all():
+            M = torch.nan_to_num(M, nan=0.0, posinf=0.0, neginf=0.0)
+
+        eye = torch.eye(M.shape[0], device=M.device, dtype=M.dtype)
+        last_err = None
+        for eps in [0.0, 1e-6, 1e-5, 1e-4, 1e-3]:
+            try:
+                A = M if eps == 0.0 else (M + eps * eye)
+                return torch.linalg.eigvalsh(A).clamp(min=0)
+            except Exception as e:
+                last_err = e
+
+        A_cpu = M.cpu().double()
+        A_cpu = 0.5 * (A_cpu + A_cpu.T)
+        eye_cpu = torch.eye(A_cpu.shape[0], device=A_cpu.device, dtype=A_cpu.dtype)
+        for eps in [1e-8, 1e-6, 1e-4]:
+            try:
+                w = torch.linalg.eigvalsh(A_cpu + eps * eye_cpu)
+                return w.clamp(min=0).to(cov.device, dtype=cov.dtype)
+            except Exception as e:
+                last_err = e
+
+        raise RuntimeError(f"_safe_eigvalsh failed after GPU and CPU fallback: {last_err}")
+
 
     def _factor_layer_summary(self, A: Dict[str, torch.Tensor], G: Dict[str, torch.Tensor]) -> Dict[str, Dict[str, float]]:
         out = {}
         for name in sorted(set(A.keys()) & set(G.keys())):
-            wa = torch.linalg.eigvalsh(A[name].float()).clamp(min=0)
-            wg = torch.linalg.eigvalsh(G[name].float()).clamp(min=0)
+            wa = self._safe_eigvalsh(A[name])
+            wg = self._safe_eigvalsh(G[name])
             ra = min(self.rank_a, A[name].shape[0])
             rg = min(self.rank_g, G[name].shape[0])
             tr_a = float(wa.sum().item())
@@ -693,21 +737,24 @@ def make_loader(items, batch_size: int, shuffle: bool):
 def evaluate(model: nn.Module, te_task, batch_size: int,
              task_id: Optional[int] = None, cpt: Optional[int] = None) -> float:
     """Task-incremental (masked) accuracy when task_id/cpt are given: the argmax
-    is restricted to task_id's own classes.  Without masking, a single shared
-    100-way head collapses to ~0 on every past task (cross-entropy on the current
-    task suppresses old-class logits) -- that measures head collapse, not the
-    feature forgetting this method protects.  Task-IL is the correct protocol."""
+    is restricted to task_id's own class block.  Without masking, a single shared
+    100-way head under class-incremental training collapses to EXACTLY 0 on every
+    past task (cross-entropy on the current task drives all old-class logits down),
+    which measures head collapse -- unfixable by any gradient-geometry method,
+    needs replay -- not the FEATURE forgetting this method protects.  Task-IL is
+    the correct protocol for a feature-protection method."""
     was_training = model.training
     model.eval()
     c = n = 0
-    lo = task_id * cpt if task_id is not None and cpt is not None else None
+    lo = task_id * cpt if (task_id is not None and cpt is not None) else None
     for x, y in make_loader(te_task, batch_size, False):
         logits = model(x)
-        if lo is not None:                                 # mask to this task's classes
-            mask = torch.full_like(logits, float("-inf"))
-            mask[:, lo:lo + cpt] = logits[:, lo:lo + cpt]
-            logits = mask
-        c += (logits.argmax(1) == y).sum().item(); n += len(y)
+        if lo is not None:
+            masked = torch.full_like(logits, float("-inf"))
+            masked[:, lo:lo + cpt] = logits[:, lo:lo + cpt]
+            logits = masked
+        c += (logits.argmax(1) == y).sum().item()
+        n += len(y)
     if was_training:
         model.train()
     return c / max(1, n)
@@ -804,7 +851,7 @@ def run_one(method: str, tr, te, args, seed: int) -> Dict[str, Any]:
             ewc.estimate_fisher(model, tr[t], args.batch_size)
 
         task_accs = {}
-        for j in range(t + 1):                             # task-IL: mask to task j's classes
+        for j in range(t + 1):
             task_accs[f"task_{j}"] = float(
                 evaluate(model, te[j], args.batch_size, task_id=j, cpt=args.cpt))
             acc[t, j] = task_accs[f"task_{j}"]
@@ -938,6 +985,8 @@ if __name__ == "__main__":
         "event_log": LOGGER.events,
     }
 
+    import os
+    os.makedirs("output", exist_ok=True)
     with open("output/memflow_deep_exact_logged_results.json", "w") as f:
         json.dump(to_python(payload), f, indent=1)
 
