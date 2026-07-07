@@ -242,7 +242,11 @@ class KFACAnchorMetric:
     @staticmethod
     def _cov(rows: torch.Tensor) -> torch.Tensor:
         rows = rows.float()
-        return (rows.T @ rows) / max(1, rows.shape[0])
+        if not torch.isfinite(rows).all():
+            rows = torch.nan_to_num(rows, nan=0.0, posinf=0.0, neginf=0.0)
+        C = (rows.T @ rows) / max(1, rows.shape[0])
+        C = 0.5 * (C + C.T)
+        return C
 
     def _pack_entries(self, entries: List[ReservoirEntry]) -> Tuple[torch.Tensor, torch.Tensor]:
         x = torch.stack([e.x for e in entries]).to(DEV)
@@ -281,9 +285,44 @@ class KFACAnchorMetric:
 
     @staticmethod
     def _top_eig(cov: torch.Tensor, rank: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        w, V = torch.linalg.eigh(cov.float())
         r = min(rank, cov.shape[0])
-        return V[:, -r:], w[-r:].clamp(min=0)
+        if r == 0:
+            return cov.new_zeros((cov.shape[0], 0)), cov.new_zeros((0,))
+
+        M = cov.detach().float()
+        M = 0.5 * (M + M.T)
+
+        if not torch.isfinite(M).all():
+            raise RuntimeError("Non-finite entries in covariance matrix before eigh")
+
+        eye = torch.eye(M.shape[0], device=M.device, dtype=M.dtype)
+        jitter_scales = [0.0, 1e-6, 1e-5, 1e-4, 1e-3]
+        last_err = None
+
+        for eps in jitter_scales:
+            try:
+                A = M if eps == 0.0 else (M + eps * eye)
+                w, V = torch.linalg.eigh(A)
+                return V[:, -r:], w[-r:].clamp(min=0)
+            except Exception as e:
+                last_err = e
+
+        try:
+            A_cpu = M.cpu().double()
+            A_cpu = 0.5 * (A_cpu + A_cpu.T)
+            eye_cpu = torch.eye(A_cpu.shape[0], device=A_cpu.device, dtype=A_cpu.dtype)
+            for eps in [1e-8, 1e-6, 1e-4]:
+                try:
+                    w, V = torch.linalg.eigh(A_cpu + eps * eye_cpu)
+                    V = V[:, -r:].to(cov.device, dtype=cov.dtype)
+                    w = w[-r:].clamp(min=0).to(cov.device, dtype=cov.dtype)
+                    return V, w
+                except Exception as e:
+                    last_err = e
+        except Exception as e:
+            last_err = e
+
+        raise RuntimeError(f"_top_eig failed after GPU and CPU fallback: {last_err}")
 
     def _make_factor_state(self, A: Dict[str, torch.Tensor], G: Dict[str, torch.Tensor]) -> FactorState:
         return FactorState(
@@ -519,52 +558,115 @@ DEFAULT_TASKS = 10
 DEFAULT_CPT = 10
 
 
-def _find_cifar_root():
-    """Locate a pre-extracted CIFAR-100 (cifar-100-python/) without downloading:
-    checks ./data and any attached Kaggle dataset under /kaggle/input/*.  Attach
-    a CIFAR-100 dataset to the notebook to avoid the flaky torchvision download."""
-    import glob, os
-    cands = ["./data"] + [os.path.dirname(p) for p in
-             glob.glob("/kaggle/input/*/cifar-100-python") +
-             glob.glob("/kaggle/input/*/*/cifar-100-python")]
-    for root in cands:
-        if os.path.isdir(os.path.join(root, "cifar-100-python")):
-            return root
-    return None
+def find_cifar_root():
+    """Locate CIFAR-100 without relying on one exact Kaggle folder layout.
+
+    Supported layouts:
+    - ./data/cifar-100-python/
+    - /kaggle/input/<slug>/train,test,meta
+    - /kaggle/input/<slug>/cifar-100-python/train,test,meta
+    - deeper nested variants under /kaggle/input
+    """
+    import glob
+    import os
+
+    def has_cifar_files(p: str) -> bool:
+        return all(os.path.isfile(os.path.join(p, f)) for f in ["train", "test", "meta"])
+
+    candidates = ["./data"]
+    candidates += glob.glob("/kaggle/input/*")
+    candidates += glob.glob("/kaggle/input/*/*")
+    candidates += glob.glob("/kaggle/input/*/*/*")
+
+    seen = set()
+    ordered = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            ordered.append(c)
+
+    for root in ordered:
+        if not os.path.isdir(root):
+            continue
+        if has_cifar_files(root):
+            return root, "flat"
+        nested = os.path.join(root, "cifar-100-python")
+        if os.path.isdir(nested) and has_cifar_files(nested):
+            return nested, "nested"
+
+    return None, None
+
+
+def load_cifar100_pickles(base: str):
+    import os
+    import pickle
+    import numpy as np
+
+    def unpickle(fp):
+        with open(fp, "rb") as fo:
+            obj = pickle.load(fo, encoding="bytes")
+        return obj
+
+    if not os.path.isdir(base):
+        raise FileNotFoundError(f"CIFAR root does not exist: {base}")
+
+    required = [os.path.join(base, f) for f in ["train", "test", "meta"]]
+    missing = [p for p in required if not os.path.isfile(p)]
+    if missing:
+        raise FileNotFoundError(f"Missing CIFAR-100 files under {base}: {missing}")
+
+    trd = unpickle(os.path.join(base, "train"))
+    ted = unpickle(os.path.join(base, "test"))
+
+    class DS:
+        pass
+
+    tr = DS()
+    te = DS()
+
+    tr.data = np.asarray(trd[b"data"], dtype=np.uint8).reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
+    te.data = np.asarray(ted[b"data"], dtype=np.uint8).reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
+    tr.targets = [int(y) for y in trd[b"fine_labels"]]
+    te.targets = [int(y) for y in ted[b"fine_labels"]]
+    return tr, te
 
 
 def get_split_cifar100(tasks: int, cpt: int):
-    import os, socket, time as _t, torchvision
-    socket.setdefaulttimeout(30)                           # a hanging download now fails fast
+    import socket
+    import time as _t
+    import torchvision
 
-    def raw(download):
-        root = _find_cifar_root() or "./data"
+    socket.setdefaulttimeout(30)
+
+    def raw(root, download: bool):
         tr = torchvision.datasets.CIFAR100(root, train=True, download=download, transform=None)
         te = torchvision.datasets.CIFAR100(root, train=False, download=download, transform=None)
         return tr, te
 
-    root = _find_cifar_root()
-    if root is not None:                                   # already present -> no network
-        log(f"CIFAR-100 found locally at {root}; skipping download")
-        tr, te = raw(download=False)
-    else:                                                  # download with retries + timeout
+    root, mode = find_cifar_root()
+    if root is not None:
+        log(f"CIFAR-100 found locally at {root} (mode={mode}); skipping download")
+        tr, te = load_cifar100_pickles(root)
+    else:
         log("CIFAR-100 not found locally; downloading (needs Kaggle Internet ON)")
         last = None
         for attempt in range(4):
             try:
-                tr, te = raw(download=True); break
-            except Exception as e:                         # reset / URLError / timeout
+                tr, te = raw("./data", True)
+                break
+            except Exception as e:
                 last = e
-                log(f"download attempt {attempt+1}/4 failed: {type(e).__name__}; retrying")
+                log(f"download attempt {attempt+1}/4 failed: {type(e).__name__}: {e}; retrying")
                 _t.sleep(5 * (attempt + 1))
         else:
             raise SystemExit(
-                "Could not download CIFAR-100 after 4 tries. Two fixes: (1) enable "
-                "Internet in the Kaggle notebook (Settings -> Internet -> On); or (2) "
-                "attach a CIFAR-100 dataset (with cifar-100-python/) as an input -- this "
-                f"script finds it automatically under /kaggle/input/*.  Last error: {last}")
+                "Could not load CIFAR-100 after 4 tries. Supported local layouts are: "
+                "(1) /kaggle/input/<dataset>/train,test,meta, "
+                "(2) /kaggle/input/<dataset>/cifar-100-python/train,test,meta, "
+                "or (3) enable Internet so torchvision can download. "
+                f"Last error: {last}"
+            )
 
-    # VECTORIZED transform + split (no per-image PIL loop, which silently stalls):
     mean = torch.tensor([0.5071, 0.4865, 0.4409]).view(1, 3, 1, 1)
     std = torch.tensor([0.2673, 0.2564, 0.2762]).view(1, 3, 1, 1)
     def prep(ds):
@@ -588,14 +690,24 @@ def make_loader(items, batch_size: int, shuffle: bool):
 
 
 @torch.no_grad()
-def evaluate(model: nn.Module, te_task, batch_size: int) -> float:
+def evaluate(model: nn.Module, te_task, batch_size: int,
+             task_id: Optional[int] = None, cpt: Optional[int] = None) -> float:
+    """Task-incremental (masked) accuracy when task_id/cpt are given: the argmax
+    is restricted to task_id's own classes.  Without masking, a single shared
+    100-way head collapses to ~0 on every past task (cross-entropy on the current
+    task suppresses old-class logits) -- that measures head collapse, not the
+    feature forgetting this method protects.  Task-IL is the correct protocol."""
     was_training = model.training
     model.eval()
-    c = 0
-    n = 0
+    c = n = 0
+    lo = task_id * cpt if task_id is not None and cpt is not None else None
     for x, y in make_loader(te_task, batch_size, False):
-        c += (model(x).argmax(1) == y).sum().item()
-        n += len(y)
+        logits = model(x)
+        if lo is not None:                                 # mask to this task's classes
+            mask = torch.full_like(logits, float("-inf"))
+            mask[:, lo:lo + cpt] = logits[:, lo:lo + cpt]
+            logits = mask
+        c += (logits.argmax(1) == y).sum().item(); n += len(y)
     if was_training:
         model.train()
     return c / max(1, n)
@@ -692,8 +804,9 @@ def run_one(method: str, tr, te, args, seed: int) -> Dict[str, Any]:
             ewc.estimate_fisher(model, tr[t], args.batch_size)
 
         task_accs = {}
-        for j in range(t + 1):
-            task_accs[f"task_{j}"] = float(evaluate(model, te[j], args.batch_size))
+        for j in range(t + 1):                             # task-IL: mask to task j's classes
+            task_accs[f"task_{j}"] = float(
+                evaluate(model, te[j], args.batch_size, task_id=j, cpt=args.cpt))
             acc[t, j] = task_accs[f"task_{j}"]
 
         metrics_now = summarize_metrics(acc[: t + 1, : t + 1], args.cpt)
