@@ -1,224 +1,451 @@
 # =====================================================================
-#  kaggle_jspace_interference.py -- BRIDGING EXPERIMENT: does measured
-#  forgetting concentrate in the Jacobian-lens J-space?
+# kaggle_jspace_interference_exact.py
 #
-#  Two averaged-Jacobian theories meet here.  The J-lens of Gurnee,
-#  Lindsey et al. (2026) reads a residual-stream activation by its
-#  context-AVERAGED forward Jacobian  J_l = E[ d h_final / d h_l ]
-#  composed with the unembedding, and calls the low-rank span of the
-#  active readout directions the J-space (the "verbalizable" subspace).
-#  This paper's interference geometry reads a task by its data-AVERAGED
-#  Gauss-Newton curvature Sigma_A, and calls range(Sigma_A) the
-#  directions whose perturbation costs forgetting (ker(Sigma_A) free).
+# Exact bridging experiment with two parallel H1 measurements:
+#   H1-grad : interference energy on A through g = d CE_A / d h_l
+#   H1-KL   : actual KL on A between old and new predictive distributions
 #
-#  HYPOTHESIS: these are the same functional subspace.  Then forgetting
-#  of task A caused by learning B should live in J-space:
-#    (H1 decomposition) the readout change on A projected onto J-space,
-#        P_J . Delta f, should recover ~all of the measured forgetting,
-#        while the orthogonal part (I - P_J).Delta f contributes ~0.
-#    (H2 intervention)  protecting J-space -- projecting the LoRA update
-#        so the induced Delta f stays orthogonal to A's J-space -- should
-#        cut forgetting nearly as much as protecting Sigma_A's own top
-#        subspace, and far more than naive; a random subspace of equal
-#        rank should NOT (specificity control).
+# H2 compares:
+#   naive, protect-Jspace, protect-Sigma, protect-random
 #
-#  Setup: frozen pythia-410m; the J-lens supplies P_J at the readout
-#  layer; a LoRA head learns the 4-domain stream; forgetting on earlier
-#  domains is decomposed and then gated by P_J.  ~40 min on 1x T4.
-#
-#  Needs the released lens package:  pip install jlens  (github
-#  anthropics/jacobian-lens); falls back to fitting a lens from ~200
-#  corpus prompts if no pretrained lens for the model is available.
+# Writes: jspace_interference_results.json
 # =====================================================================
-import json, os, random, time
+
+import os
+import json
+import time
+import random
+from pathlib import Path
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-MODEL = "EleutherAI/pythia-410m"
-LAYER = None            # readout layer for the lens/decomposition; None -> ~2/3 depth
-RANK_J = 64             # dimension of the J-space / protected subspaces compared
-STEPS, BS, SEQ, LR = 250, 8, 128, 1e-4
-DEV = "cuda:0" if torch.cuda.is_available() else "cpu"
-if DEV.startswith("cuda") and torch.cuda.get_device_capability(0) < (7, 0):
-    raise SystemExit("Unsupported GPU (sm<70): set Accelerator to 'GPU T4 x2'.")
+MODEL = os.getenv("JSPACE_MODEL", "EleutherAI/pythia-410m")
+RANK_J = int(os.getenv("JSPACE_RANK", 64))
+HEAD_R = int(os.getenv("JSPACE_HEAD_R", 16))
+SEQ = int(os.getenv("JSPACE_SEQ", 128))
+BS = int(os.getenv("JSPACE_BS", 8))
+LR = float(os.getenv("JSPACE_LR", 3e-4))
+STEPS = int(os.getenv("JSPACE_STEPS", 200))
+JS_CTX = int(os.getenv("JSPACE_JS_CTX", 200))
+JS_PROBES = int(os.getenv("JSPACE_JS_PROBES", 96))
+JS_TOPK = int(os.getenv("JSPACE_JS_TOPK", 20))
+SIGMA_CTX = int(os.getenv("JSPACE_SIGMA_CTX", 24))
+EVAL_BATCH = int(os.getenv("JSPACE_EVAL_BATCH", 4))
+SEED = int(os.getenv("JSPACE_SEED", 0))
+
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+
 T0 = time.time()
-def log(m): print(f"[{time.time()-T0:7.1f}s] {m}", flush=True)
+def log(msg):
+    print(f"[{time.time()-T0:7.1f}s] {msg}", flush=True)
 
 
-# ---- J-space basis from the released Jacobian lens -------------------
-def jspace_basis(model, tok, layer, contexts, rank):
-    """Top-`rank` principal subspace of the J-lens readout map active on
-    `contexts`.  Returns an orthonormal (d_model x rank) basis P_J whose
-    span is the residual-stream subspace that the averaged forward
-    Jacobian maps to output tokens actually predicted on these contexts."""
-    try:
-        import jlens
-    except Exception as e:
-        raise SystemExit("pip install jlens  (github anthropics/jacobian-lens)") from e
-    jm = jlens.from_hf(model, tok)
-    try:                                                   # a pretrained lens if one exists
-        lens = jlens.JacobianLens.from_pretrained("anthropics/jacobian-lens",
-                                                   filename=f"{MODEL.split('/')[-1]}/lens.pt")
-    except Exception:
-        log("no pretrained lens for this model; fitting one (~200 prompts)")
-        lens = jlens.fit(jm, prompts=contexts[:200])
-    Jl = lens.jacobian(layer).to(DEV).float()              # (d_model x d_model) averaged Jacobian
-    WU = model.get_output_embeddings().weight.detach().float()   # (V x d_model)
-    # readout map on this layer:  logits ~ WU @ (Jl @ h).  Collect the rows
-    # of (WU @ Jl) for the tokens actually predicted on the contexts, and
-    # take their top-`rank` right-singular directions = the active J-space.
-    with torch.no_grad():
-        active = set()
-        for ids in contexts[:64]:
-            h = hidden_at(model, ids.to(DEV), layer)       # (T x d_model)
-            top = (h @ (WU @ Jl).T).topk(5, -1).indices    # top predicted tokens per pos
-            active.update(top.flatten().tolist())
-        rows = (WU[list(active)] @ Jl)                     # (|active| x d_model)
-        Vt = torch.linalg.svd(rows, full_matrices=False)[2]
-    return Vt[:rank].T.contiguous()                        # (d_model x rank)
+def choose_device():
+    if not torch.cuda.is_available():
+        log("CUDA not available -> using CPU")
+        return torch.device("cpu")
+    n = torch.cuda.device_count()
+    names = [torch.cuda.get_device_name(i) for i in range(n)]
+    caps = [torch.cuda.get_device_capability(i) for i in range(n)]
+    log("Visible CUDA devices: " + " | ".join(f"{i}:{names[i]} sm{caps[i][0]}{caps[i][1]}" for i in range(n)))
+    return torch.device("cuda:0")
 
 
-# ---- model plumbing --------------------------------------------------
+DEV = choose_device()
+
+
+def orthonormal_cols(x):
+    q, _ = torch.linalg.qr(x, mode="reduced")
+    return q
+
+
+def causal_ce(logits, ids):
+    return F.cross_entropy(
+        logits[:, :-1].reshape(-1, logits.shape[-1]),
+        ids[:, 1:].reshape(-1),
+    )
+
+
+def principal_overlap(P1, P2):
+    s = torch.linalg.svdvals(P1.T @ P2)
+    return {
+        "principal_cosines": [float(v) for v in s.detach().cpu()],
+        "mean_squared_overlap": float(s.square().mean().item()),
+        "max_cosine": float(s.max().item()),
+        "min_cosine": float(s.min().item()),
+    }
+
+
 def build(model_name):
     from transformers import AutoModelForCausalLM, AutoTokenizer
+
     tok = AutoTokenizer.from_pretrained(model_name)
-    if tok.pad_token_id is None: tok.pad_token = tok.eos_token
-    m = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float32).to(DEV)
-    m.config.use_cache = False
-    for p in m.parameters(): p.requires_grad_(False)
-    return m, tok
+    if tok.pad_token_id is None:
+        tok.pad_token = tok.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float32).to(DEV)
+    model.config.use_cache = False
+    model.eval()
+    for p in model.parameters():
+        p.requires_grad_(False)
+    return model, tok
 
 
-def hidden_at(model, ids, layer):
-    ids = ids.view(1, -1) if ids.ndim == 1 else ids
-    hs = model(ids, attention_mask=torch.ones_like(ids), output_hidden_states=True).hidden_states
-    return hs[layer][0]
-
-
-class Head(nn.Module):
-    """Trainable low-rank readout perturbation at `layer`: the free
-    parameters whose movement we decompose against P_J.  Delta f is the
-    induced change in the layer-`layer` residual stream."""
-    def __init__(self, d, r=16):
-        super().__init__()
-        self.A = nn.Parameter(torch.zeros(d, r)); self.B = nn.Parameter(torch.randn(r, d) * 1e-3)
-    def delta(self, h): return (h @ self.A) @ self.B
+def get_layer_module(model, layer_idx):
+    return model.gpt_neox.layers[layer_idx]
 
 
 def get_domains(tok):
     from datasets import load_dataset
+
     out = []
-    for name, ds, filt, n in [
-        ("news", load_dataset("ag_news", split="train"), lambda x: x["label"] == 0, 1500),
-        ("imdb", load_dataset("imdb", split="train"), lambda x: True, 700),
-        ("wiki", load_dataset("wikitext", "wikitext-2-raw-v1", split="train"),
-         lambda x: len(x["text"]) > 200, 1400),
-        ("tweets", load_dataset("tweet_eval", "sentiment", split="train"), lambda x: True, 4500)]:
-        ids = tok("\n\n".join([x["text"] for x in ds if filt(x)][:n]),
-                  return_tensors="pt").input_ids[0]
-        ch = ids[: (len(ids) // SEQ) * SEQ].view(-1, SEQ)
-        out.append((name, ch[:110], ch[110:134]))
+    specs = [
+        ("news",   load_dataset("ag_news", split="train"), lambda x: x["label"] == 0, 1500),
+        ("imdb",   load_dataset("imdb", split="train"), lambda x: True,                700),
+        ("wiki",   load_dataset("wikitext", "wikitext-2-raw-v1", split="train"),
+                   lambda x: len(x["text"]) > 200, 1400),
+        ("tweets", load_dataset("tweet_eval", "sentiment", split="train"), lambda x: True, 4500),
+    ]
+
+    for name, ds, filt, n in specs:
+        texts = []
+        for x in ds:
+            if filt(x):
+                t = x["text"]
+                if isinstance(t, str) and t.strip():
+                    texts.append(t)
+            if len(texts) >= n:
+                break
+        ids = tok("\n\n".join(texts), return_tensors="pt").input_ids[0]
+        usable = (len(ids) // SEQ) * SEQ
+        chunks = ids[:usable].view(-1, SEQ)
+        out.append((name, chunks[:110], chunks[110:134]))
     return out
+
+
+def sample_batch(chunks, batch_size):
+    idx = torch.randint(0, len(chunks), (batch_size,))
+    return chunks[idx].to(DEV)
+
+
+def mixed_contexts_for_jspace(doms, n_ctx):
+    xs = []
+    for _, tr, va in doms:
+        for i in range(len(va)):
+            xs.append(va[i])
+        for i in range(min(len(tr), 32)):
+            xs.append(tr[i])
+    random.shuffle(xs)
+    return xs[:n_ctx]
+
+
+class Head(nn.Module):
+    def __init__(self, d, r=HEAD_R):
+        super().__init__()
+        self.A = nn.Parameter(torch.zeros(d, r))
+        self.B = nn.Parameter(torch.randn(r, d) * 1e-3)
+
+    def delta(self, h):
+        return (h @ self.A) @ self.B
+
+
+class Injector:
+    def __init__(self, model, layer_idx, head=None, capture_grad=False, basis=None, mode="full"):
+        self.layer = get_layer_module(model, layer_idx)
+        self.head = head
+        self.capture_grad = capture_grad
+        self.basis = basis
+        self.mode = mode  # full | proj | orth
+        self.handle = None
+        self.grad_h = None
+        self.hidden_h = None
+
+    def _apply_basis(self, dh):
+        if self.basis is None or self.mode == "full":
+            return dh
+        dh_proj = (dh @ self.basis) @ self.basis.T
+        if self.mode == "proj":
+            return dh_proj
+        if self.mode == "orth":
+            return dh - dh_proj
+        raise ValueError(f"unknown mode: {self.mode}")
+
+    def _hook(self, mod, inp, out):
+        h = out[0] if isinstance(out, tuple) else out
+        self.hidden_h = h
+        if self.capture_grad:
+            h.requires_grad_(True)
+            h.retain_grad()
+            self.grad_h = h
+        if self.head is not None:
+            dh = self.head.delta(h)
+            dh = self._apply_basis(dh)
+            h = h + dh
+        return (h,) + tuple(out[1:]) if isinstance(out, tuple) else h
+
+    def __enter__(self):
+        self.handle = self.layer.register_forward_hook(self._hook)
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.handle is not None:
+            self.handle.remove()
+
+
+def fit_jspace_basis(model, layer_idx, contexts, rank):
+    d = model.config.hidden_size
+    sketch = torch.zeros(JS_PROBES, d, device=DEV)
+
+    for p in range(JS_PROBES):
+        acc = torch.zeros(d, device=DEV)
+        k = 0
+        for ids in contexts:
+            ids = ids.view(1, -1).to(DEV)
+            model.zero_grad(set_to_none=True)
+            with Injector(model, layer_idx, capture_grad=True) as inj:
+                logits = model(ids, attention_mask=torch.ones_like(ids)).logits[0]
+                last = logits[-1]
+                top = last.topk(JS_TOPK).indices
+                probe = torch.zeros_like(last)
+                probe[top] = torch.randn(JS_TOPK, device=DEV)
+                (probe @ last).backward()
+                g_last = inj.grad_h.grad[0, -1].detach()
+                acc += g_last
+                k += 1
+        sketch[p] = acc / max(k, 1)
+
+    return orthonormal_cols(sketch.T)[:, :rank]
+
+
+def cached_or_fit_jspace_basis(model, layer_idx, contexts, rank):
+    safe = MODEL.replace("/", "__")
+    cache_path = Path(f"jspace_basis_{safe}_L{layer_idx}_r{rank}.pt")
+    if cache_path.exists():
+        obj = torch.load(cache_path, map_location=DEV)
+        P = obj["basis"].to(DEV)
+        log(f"loaded cached J-space basis from {cache_path}")
+        return orthonormal_cols(P)[:, :rank]
+
+    fit_ctx = contexts[:JS_CTX]
+    log(f"no cached J-space basis found -> fitting from {len(fit_ctx)} prompts")
+    P = fit_jspace_basis(model, layer_idx, fit_ctx, rank).detach().cpu()
+    torch.save({"basis": P, "model": MODEL, "layer": layer_idx, "rank": rank}, cache_path)
+    log(f"saved J-space basis to {cache_path}")
+    return P.to(DEV)
+
+
+def sigma_A_basis(model, layer_idx, A_contexts, rank):
+    G = []
+    for ids in A_contexts[:SIGMA_CTX]:
+        ids = ids.view(1, -1).to(DEV)
+        model.zero_grad(set_to_none=True)
+        with Injector(model, layer_idx, capture_grad=True) as inj:
+            logits = model(ids, attention_mask=torch.ones_like(ids)).logits
+            loss = causal_ce(logits, ids)
+            loss.backward()
+            g = inj.grad_h.grad[0].detach()
+            G.append(g)
+    G = torch.cat(G, dim=0)
+    Sigma = (G.T @ G) / max(len(G), 1)
+    _, evecs = torch.linalg.eigh(Sigma)
+    return orthonormal_cols(evecs[:, -rank:])
+
+
+def true_ce(model, chunks, head=None, layer_idx=None, basis=None, mode="full"):
+    total = 0.0
+    total_n = 0
+    with torch.no_grad():
+        for i in range(0, len(chunks), EVAL_BATCH):
+            ids = chunks[i:i+EVAL_BATCH].to(DEV)
+            if head is None:
+                logits = model(ids, attention_mask=torch.ones_like(ids)).logits
+            else:
+                with Injector(model, layer_idx, head=head, basis=basis, mode=mode):
+                    logits = model(ids, attention_mask=torch.ones_like(ids)).logits
+            loss = causal_ce(logits, ids)
+            total += float(loss) * len(ids)
+            total_n += len(ids)
+    return total / max(total_n, 1)
+
+
+def tokenwise_kl_from_logits(base_logits, new_logits):
+    base = base_logits[:, :-1, :]
+    new = new_logits[:, :-1, :]
+    logp0 = F.log_softmax(base, dim=-1)
+    p0 = logp0.exp()
+    logp1 = F.log_softmax(new, dim=-1)
+    return (p0 * (logp0 - logp1)).sum(dim=-1)
+
+
+def h1_dual_metrics_on_A(model, layer_idx, A_chunks, head, P_J):
+    grad_E_full = 0.0
+    grad_E_J = 0.0
+    grad_E_orth = 0.0
+
+    kl_full = 0.0
+    kl_J = 0.0
+    kl_orth = 0.0
+
+    n_tokens_grad = 0
+    n_tokens_kl = 0
+
+    for i in range(0, len(A_chunks), EVAL_BATCH):
+        ids = A_chunks[i:i+EVAL_BATCH].to(DEV)
+
+        model.zero_grad(set_to_none=True)
+        with Injector(model, layer_idx, capture_grad=True) as inj:
+            base_logits = model(ids, attention_mask=torch.ones_like(ids)).logits
+            loss = causal_ce(base_logits, ids)
+            loss.backward()
+            g = inj.grad_h.grad.detach()     # [B, S, D]
+            h = inj.hidden_h.detach()        # [B, S, D]
+
+        with torch.no_grad():
+            dh_full = head.delta(h)
+            dh_J = (dh_full @ P_J) @ P_J.T
+            dh_orth = dh_full - dh_J
+
+            s_full = (g * dh_full).sum(dim=-1)
+            s_J = (g * dh_J).sum(dim=-1)
+            s_orth = (g * dh_orth).sum(dim=-1)
+
+            grad_E_full += float(s_full.square().sum().item())
+            grad_E_J += float(s_J.square().sum().item())
+            grad_E_orth += float(s_orth.square().sum().item())
+            n_tokens_grad += s_full.numel()
+
+            with Injector(model, layer_idx, head=head, basis=P_J, mode="full"):
+                logits_full = model(ids, attention_mask=torch.ones_like(ids)).logits
+            with Injector(model, layer_idx, head=head, basis=P_J, mode="proj"):
+                logits_J = model(ids, attention_mask=torch.ones_like(ids)).logits
+            with Injector(model, layer_idx, head=head, basis=P_J, mode="orth"):
+                logits_orth = model(ids, attention_mask=torch.ones_like(ids)).logits
+
+            kf = tokenwise_kl_from_logits(base_logits.detach(), logits_full)
+            kj = tokenwise_kl_from_logits(base_logits.detach(), logits_J)
+            ko = tokenwise_kl_from_logits(base_logits.detach(), logits_orth)
+
+            kl_full += float(kf.sum().item())
+            kl_J += float(kj.sum().item())
+            kl_orth += float(ko.sum().item())
+            n_tokens_kl += kf.numel()
+
+    return {
+        "grad_energy_full": grad_E_full / max(n_tokens_grad, 1),
+        "grad_energy_J": grad_E_J / max(n_tokens_grad, 1),
+        "grad_energy_orth": grad_E_orth / max(n_tokens_grad, 1),
+        "grad_energy_frac_J": grad_E_J / max(grad_E_full, 1e-12),
+        "grad_energy_frac_orth": grad_E_orth / max(grad_E_full, 1e-12),
+        "kl_full": kl_full / max(n_tokens_kl, 1),
+        "kl_J": kl_J / max(n_tokens_kl, 1),
+        "kl_orth": kl_orth / max(n_tokens_kl, 1),
+        "kl_frac_J": kl_J / max(kl_full, 1e-12),
+        "kl_frac_orth": kl_orth / max(kl_full, 1e-12),
+    }
+
+
+def project_B_off_subspace_(head, basis):
+    with torch.no_grad():
+        head.B -= (head.B @ basis) @ basis.T
+
+
+def train_head(model, doms, layer_idx, protect_basis=None):
+    d = model.config.hidden_size
+    head = Head(d, r=HEAD_R).to(DEV)
+    opt = torch.optim.Adam(head.parameters(), lr=LR)
+
+    with Injector(model, layer_idx, head=head):
+        for t in (1, 2, 3):
+            tr = doms[t][1]
+            for _ in range(STEPS):
+                ids = sample_batch(tr, BS)
+                logits = model(ids, attention_mask=torch.ones_like(ids)).logits
+                loss = causal_ce(logits, ids)
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
+                if protect_basis is not None:
+                    project_B_off_subspace_(head, protect_basis)
+    return head
 
 
 if __name__ == "__main__":
     model, tok = build(MODEL)
     d = model.config.hidden_size
-    layer = LAYER or (model.config.num_hidden_layers * 2 // 3)
+    layer_idx = model.config.num_hidden_layers * 2 // 3
+    rank_over_d = RANK_J / d
+
+    log(f"model={MODEL} layer={layer_idx} d={d} rank={RANK_J} head_r={HEAD_R}")
     doms = get_domains(tok)
-    log(f"model {MODEL}, readout layer {layer}, d={d}")
+    A_name, A_train, A_val = doms[0]
+    A_contexts = [A_val[i] for i in range(len(A_val))]
 
-    # J-space basis on task A (domain 0) held-out contexts
-    A_ctx = [doms[0][2][i] for i in range(len(doms[0][2]))]
-    P_J = jspace_basis(model, tok, layer, A_ctx, RANK_J)
-    log(f"J-space basis: {P_J.shape}")
+    fit_contexts = mixed_contexts_for_jspace(doms, JS_CTX)
+    P_J = cached_or_fit_jspace_basis(model, layer_idx, fit_contexts, RANK_J)
 
-    # Sigma_A top-RANK_J subspace (this paper's native protected subspace) on A
-    with torch.no_grad():
-        H = torch.cat([hidden_at(model, doms[0][2][i].to(DEV), layer) for i in range(24)])
-        C = H.T @ H / len(H)
-        P_S = torch.linalg.eigh(C)[1][:, -RANK_J:]         # top-RANK_J eigenvectors
-    P_R = torch.linalg.qr(torch.randn(d, RANK_J, device=DEV))[0]   # random control
-    overlap = float((P_J.T @ P_S).square().sum() / RANK_J)
-    log(f"principal overlap  J-space vs Sigma_A-subspace = {overlap:.3f} "
-        f"(random baseline ~ {RANK_J/d:.3f})")
+    log("estimating Sigma_A top-r subspace from empirical Fisher / Gauss-Newton geometry on A")
+    P_S = sigma_A_basis(model, layer_idx, A_contexts, RANK_J)
+    P_R = orthonormal_cols(torch.randn(d, RANK_J, device=DEV))
 
-    # ---- H1: decompose measured forgetting by J-space projection ------
-    # Learn domains 1..3 with a naive head; measure Delta f on A at the
-    # readout layer and split energy into P_J vs orthogonal.
-    def readout_ce(head, dom):
-        te = dom[1] if len(dom) == 2 else dom[2]
-        tot = 0.0
-        for i in range(0, len(te), 4):
-            ids = te[i:i+4].to(DEV)
-            hs = model(ids, attention_mask=torch.ones_like(ids),
-                       output_hidden_states=True).hidden_states
-            h = hs[layer] + (head.delta(hs[layer]) if head else 0)
-            # cheap readout proxy: re-inject and run remaining layers is costly;
-            # use the model's own head on the perturbed final state approximation
-            logits = model.get_output_embeddings()(model.gpt_neox.final_layer_norm(h))
-            tot += float(F.cross_entropy(logits[:, :-1].reshape(-1, logits.shape[-1]),
-                                         ids[:, 1:].reshape(-1))) * len(ids)
-        return tot / len(te)
+    ov = principal_overlap(P_J, P_S)
+    log(f"principal overlap J vs Sigma_A: mean(sv^2)={ov['mean_squared_overlap']:.4f} (random baseline ~ {rank_over_d:.4f})")
+    log("principal cosines (top 10): " + " ".join(f"{x:.3f}" for x in ov["principal_cosines"][:10]))
 
-    head = Head(d).to(DEV)
-    opt = torch.optim.Adam([head.A, head.B], lr=LR)
-    base_A = readout_ce(head, doms[0])
-    with torch.no_grad():
-        f0 = torch.cat([head.delta(hidden_at(model, doms[0][2][i].to(DEV), layer))
-                        for i in range(24)])
-    for t in (1, 2, 3):
-        for _ in range(STEPS):
-            ids = doms[t][1][random.randint(0, len(doms[t][1]) - BS):][:BS].to(DEV)
-            hs = model(ids, attention_mask=torch.ones_like(ids),
-                       output_hidden_states=True).hidden_states
-            h = hs[layer] + head.delta(hs[layer])
-            logits = model.get_output_embeddings()(model.gpt_neox.final_layer_norm(h))
-            loss = F.cross_entropy(logits[:, :-1].reshape(-1, logits.shape[-1]),
-                                   ids[:, 1:].reshape(-1))
-            opt.zero_grad(); loss.backward(); opt.step()
-    with torch.no_grad():
-        f1 = torch.cat([head.delta(hidden_at(model, doms[0][2][i].to(DEV), layer))
-                        for i in range(24)])
-        df = f1 - f0
-        dfJ = df @ P_J @ P_J.T
-        e_tot = float(df.square().sum()); e_J = float(dfJ.square().sum())
-    fgt = readout_ce(head, doms[0]) - base_A
-    log(f"H1: forgetting on A = {fgt:+.4f} nats;  ||Delta f||^2 in J-space "
-        f"= {100*e_J/max(e_tot,1e-12):.0f}%  (random subspace ~ {100*RANK_J/d:.0f}%)")
+    log("training naive head for H1/H2")
+    head_naive = train_head(model, doms, layer_idx, protect_basis=None)
 
-    # ---- H2: protect J-space vs Sigma-space vs random vs naive --------
-    def run(P):
-        h2 = Head(d).to(DEV); op = torch.optim.Adam([h2.A, h2.B], lr=LR)
-        b0 = readout_ce(h2, doms[0])
-        for t in (1, 2, 3):
-            for _ in range(STEPS):
-                ids = doms[t][1][random.randint(0, len(doms[t][1]) - BS):][:BS].to(DEV)
-                hs = model(ids, attention_mask=torch.ones_like(ids),
-                           output_hidden_states=True).hidden_states
-                h = hs[layer] + h2.delta(hs[layer])
-                logits = model.get_output_embeddings()(model.gpt_neox.final_layer_norm(h))
-                loss = F.cross_entropy(logits[:, :-1].reshape(-1, logits.shape[-1]),
-                                       ids[:, 1:].reshape(-1))
-                op.zero_grad(); loss.backward()
-                if P is not None:                          # project B's row space off P
-                    with torch.no_grad():
-                        h2.B.grad -= (h2.B.grad @ P) @ P.T
-                op.step()
-        return readout_ce(h2, doms[0]) - b0
-    res = {name: run(P) for name, P in
-           [("naive", None), ("protect-Jspace", P_J), ("protect-Sigma", P_S),
-            ("protect-random", P_R)]}
-    log("H2 forgetting on A:  " + "  ".join(f"{k}={v:+.4f}" for k, v in res.items()))
+    H1 = h1_dual_metrics_on_A(model, layer_idx, A_val, head_naive, P_J)
+    log(
+        f"H1-grad on A: J={100*H1['grad_energy_frac_J']:.1f}% orth={100*H1['grad_energy_frac_orth']:.1f}% baseline={100*rank_over_d:.1f}%"
+    )
+    log(
+        f"H1-KL on A:   J={100*H1['kl_frac_J']:.1f}% orth={100*H1['kl_frac_orth']:.1f}% baseline={100*rank_over_d:.1f}%"
+    )
 
-    out = dict(model=MODEL, layer=layer, rank=RANK_J, overlap_J_Sigma=overlap,
-               H1_forgetting=fgt, H1_jspace_energy_frac=e_J/max(e_tot,1e-12),
-               H1_random_frac=RANK_J/d, H2=res)
-    json.dump(out, open("jspace_interference_results.json", "w"), indent=1)
+    base_A = true_ce(model, A_val)
+    H2 = {}
+    for name, P in [
+        ("naive", None),
+        ("protect-Jspace", P_J),
+        ("protect-Sigma", P_S),
+        ("protect-random", P_R),
+    ]:
+        log(f"training H2 arm: {name}")
+        h = train_head(model, doms, layer_idx, protect_basis=P)
+        H2[name] = float(true_ce(model, A_val, head=h, layer_idx=layer_idx) - base_A)
+
+    log("H2 forgetting on A (nats): " + " ".join(f"{k}={v:+.4f}" for k, v in H2.items()))
+
+    out = {
+        "model": MODEL,
+        "device": str(DEV),
+        "layer": layer_idx,
+        "rank": RANK_J,
+        "head_rank": HEAD_R,
+        "seq": SEQ,
+        "steps": STEPS,
+        "batch_size": BS,
+        "random_baseline_rank_over_d": rank_over_d,
+        "overlap_J_vs_Sigma": ov,
+        "H1": H1,
+        "H2": H2,
+        "notes": {
+            "H1_grad_definition": "Gradient-space interference energy on A using g = d CE_A / d h_l and the later-task-induced hidden change Δh, reported for full / J-projected / J-orthogonal components as E[(g·Δh)^2].",
+            "H1_KL_definition": "Actual KL on A between baseline and perturbed predictive distributions, reported for full / J-projected / J-orthogonal components.",
+            "Sigma_definition": "Top-r eigenspace of empirical Fisher / Gauss-Newton geometry E[g g^T] at the hooked layer on A.",
+        },
+    }
+
+    with open("jspace_interference_results.json", "w") as f:
+        json.dump(out, f, indent=2)
+
     log("ALL DONE -> jspace_interference_results.json")
-    print("\nReading: H1 confirms if the J-space energy fraction >> rank/d "
-          "(forgetting is verbalizable-subspace-mediated); H2 confirms if "
-          "protect-Jspace ~ protect-Sigma << naive while protect-random ~ naive "
-          "(J-space IS the interference-carrying subspace, not just any subspace).")
+    print("\nReading:")
+    print(" H1-grad supports the bridge if J >> rank/d and orth is small under E[(g·Δh)^2].")
+    print(" H1-KL supports the bridge if KL(J) >> rank/d and KL(orth) is small on A.")
+    print(" H2 supports it if protect-Jspace ≈ protect-Sigma << naive while protect-random ≈ naive.")
