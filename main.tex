@@ -1337,7 +1337,17 @@ gating the update off $P_J$, off $\Sig_A$'s top subspace, and off a random subsp
 equal rank. The interference geometry predicts a J-space energy fraction far above the
 $r/d$ random baseline in (i), and \emph{protect-J-space} $\approx$ \emph{protect-}$\Sig$
 $\ll$ \emph{naive} with \emph{protect-random} $\approx$ \emph{naive} in (ii)---a
-specificity control that would establish the two averaged-Jacobian subspaces as one.
+specificity control that would establish the two averaged-Jacobian subspaces as one. A
+first probe (frozen \texttt{pythia-410m}, layer $16$, rank $64$) is correlationally
+suggestive but not yet causally decisive: the J-space and the $\Sig_A$ subspace overlap
+at roughly twice the random baseline (mean squared principal cosine $0.12$ versus
+$0.06$), and the induced output-space (KL) interference on $A$ is enriched in J-space by
+$2.4\times$ over the $r/d$ baseline ($14.6\%$ versus $6.2\%$). The intervention (ii),
+however, was under-powered here: no rank-$64$ projection meaningfully reduced
+forgetting---including $\Sig_A$'s own subspace ($6\%$)---because at this middle layer the
+interference is high-effective-rank, so low-rank protection cannot discriminate. A
+decisive causal test requires a regime where low-rank protection is effective (a layer
+and rank below the capacity knee); we leave it open.
 
 Several algorithmic refinements---a self-calibrating threshold, low-cost $\mathcal{O}(rd)$
 online curvature via Frequent Directions
@@ -2602,6 +2612,29 @@ itself ($M=30<d$, the anchor interpolates its own noise) the advantage collapses
 which is the estimation--abstention rule's other face. The held-out micro-caches used
 throughout the language experiments (Sec.~\ref{si:llm}) are therefore mandated by the
 theory, not merely hygienic.
+
+\paragraph{Certified unlearning is one reversed row of the gate.} Engineered benign
+forgetting gives an unlearning method for free: \emph{ascend} the forget set's
+\emph{validated} loss toward the never-trained reference while the monotone-retention
+QP of Corollary~\ref{cor:qpgate} holds every retained held-out anchor in place---the
+unified gate with a single reversed constraint. The certificate is then a
+\emph{measurement}, $\mathbb{E}_{\mathrm{retain}}[\mathrm{KL}(p_{\mathrm{before}}\|
+p_{\mathrm{after}})]\le\epsilon$, rather than a retraining-equivalence definition. The
+anchor split predicts a dichotomy, validated to machine precision
+(\texttt{evaluate\_unlearning.py}): \emph{memorized} content (own support) is removable
+at a zero floor, whereas \emph{entangled} content shared with a retained task carries a
+closed-form \emph{unlearning floor} $\sum_{\mathrm{shared}}p_R\,\mathrm{KL}(\pi_R\|
+p_{\mathrm{ref}})$---the surgical optimum pays exactly this (agreement $3\times10^{-7}$),
+and the gate stalls at it rather than silently damaging retained knowledge. The
+memorized branch holds at language-model scale. Injecting a memorized canary into joint
+LoRA training on \texttt{pythia-410m} and \texttt{pythia-1b} (the earlier attempt to
+unlearn an entire natural domain was vacuous---the adapter had added only $\sim0.03$
+nats of removable domain-specific knowledge, the pre-flight lesson again), both the gate
+and naive ascent remove it fully to the base-model reference, but the gate pays $\sim
+1.7\times$ less collateral damage at both scales (retained certificate $0.101$ versus
+$0.177$ at $410$m, $0.024$ versus $0.041$ at $1$b; the directly measured retained-loss
+rise, $+0.09$ versus $+0.18$ and $+0.03$ versus $+0.07$ nats, tracks the certificate).
+The gate finds the zero-floor path that unstructured gradient ascent misses.
 
 \paragraph{Attributed forgetting at scale.} The decomposition
 Eq.~\eqref{eq:decomposition} is measurable end to end on real continual pretraining,
