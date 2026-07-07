@@ -534,31 +534,28 @@ def _find_cifar_root():
 
 
 def get_split_cifar100(tasks: int, cpt: int):
-    import os, time as _t, torchvision
-    import torchvision.transforms as T
-    tf = T.Compose([
-        T.ToTensor(),
-        T.Normalize((0.5071, 0.4865, 0.4409), (0.2673, 0.2564, 0.2762)),
-    ])
+    import os, socket, time as _t, torchvision
+    socket.setdefaulttimeout(30)                           # a hanging download now fails fast
 
-    def build(download):
+    def raw(download):
         root = _find_cifar_root() or "./data"
-        tr = torchvision.datasets.CIFAR100(root, train=True, download=download, transform=tf)
-        te = torchvision.datasets.CIFAR100(root, train=False, download=download, transform=tf)
+        tr = torchvision.datasets.CIFAR100(root, train=True, download=download, transform=None)
+        te = torchvision.datasets.CIFAR100(root, train=False, download=download, transform=None)
         return tr, te
 
     root = _find_cifar_root()
     if root is not None:                                   # already present -> no network
         log(f"CIFAR-100 found locally at {root}; skipping download")
-        tr, te = build(download=False)
-    else:                                                  # download with retries (Kaggle nets flake)
+        tr, te = raw(download=False)
+    else:                                                  # download with retries + timeout
+        log("CIFAR-100 not found locally; downloading (needs Kaggle Internet ON)")
         last = None
         for attempt in range(4):
             try:
-                tr, te = build(download=True); break
-            except Exception as e:                         # ConnectionReset / URLError / timeout
+                tr, te = raw(download=True); break
+            except Exception as e:                         # reset / URLError / timeout
                 last = e
-                log(f"CIFAR-100 download attempt {attempt+1}/4 failed: {type(e).__name__}; retrying")
+                log(f"download attempt {attempt+1}/4 failed: {type(e).__name__}; retrying")
                 _t.sleep(5 * (attempt + 1))
         else:
             raise SystemExit(
@@ -567,13 +564,18 @@ def get_split_cifar100(tasks: int, cpt: int):
                 "attach a CIFAR-100 dataset (with cifar-100-python/) as an input -- this "
                 f"script finds it automatically under /kaggle/input/*.  Last error: {last}")
 
-    def split(ds):
+    # VECTORIZED transform + split (no per-image PIL loop, which silently stalls):
+    mean = torch.tensor([0.5071, 0.4865, 0.4409]).view(1, 3, 1, 1)
+    std = torch.tensor([0.2673, 0.2564, 0.2762]).view(1, 3, 1, 1)
+    def prep(ds):
+        X = torch.from_numpy(ds.data).float().permute(0, 3, 1, 2).div_(255.0).sub_(mean).div_(std)
+        y = torch.as_tensor(ds.targets)
         out = [[] for _ in range(tasks)]
-        for x, y in ds:
-            out[y // cpt].append((x, y))
+        for i in range(len(y)):
+            out[int(y[i]) // cpt].append((X[i], int(y[i])))
         return out
-
-    return split(tr), split(te)
+    log("transforming + splitting CIFAR-100 (vectorized)")
+    return prep(tr), prep(te)
 
 
 def make_loader(items, batch_size: int, shuffle: bool):
