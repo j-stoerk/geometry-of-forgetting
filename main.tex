@@ -2192,6 +2192,26 @@ guard---is corrupted past $10^{3}$, skipping $97\%$ of noise batches at $0.05$ f
 task-initializations per stream. Boundary detection, out-of-distribution rejection, and gated
 allocation are thus one self-regulating loop, with no human-provided task boundaries.
 
+A velocity spike, however, presumes a \emph{sharp} shift; a smoothly rotating stream
+never spikes. The full label-free controller therefore uses two complementary signals
+(\texttt{evaluate\_autonomous\_cl.py}). \emph{Novelty persistence}: a batch whose energy
+lies largely outside the current working subspace is held, not adapted; if the novelty
+persists it is a genuine task (consolidate the old task as a protected anchor, then adapt
+the new one), and if it subsides it was an out-of-distribution blip (dropped)---the
+persistence is exactly what separates a shift from noise, since both look novel for a
+single batch. \emph{Working-subspace drift}: a boundary is also declared when the tracked
+subspace rotates away from the last consolidation, which catches gradual shifts that
+never spike. Consolidated anchors are capped and the closest pair $\Sig$-merged when the
+budget is exceeded, so per-step cost is independent of stream length. Over twelve seeds
+against the oracle, the controller matches it on clean shifts (detection $F_1=1.00$,
+retained excess loss $0.001$ versus $0.001$; naive $0.607$), matches or beats it under
+noise ($F_1=0.96$, $0.003$ versus $0.022$---it skips the outliers the oracle adapts on;
+naive $0.722$), and degrades gracefully under gradual drift ($F_1=0.81$, $0.274$ versus
+$0.001$; naive $0.815$), the inherently hard case, detected with the correct latency
+since a smooth shift is unobservable until it accumulates. The exact-regime synthetic
+demonstration leaves a real unlabeled language stream open, but the operating assumption
+of known boundaries is, in this regime, removed rather than merely gestured at.
+
 \paragraph{Multimodal interference is block-structured.} For a joint embedding
 $\phi=[\phi_v,\phi_l]$, the second moment $\Sig_A$ partitions into intra-modal blocks
 $\Sig_v,\Sig_l$ and a cross-modal block $\Sig_{vl}$, and the interference energy
