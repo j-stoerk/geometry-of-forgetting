@@ -34,6 +34,14 @@ MODELS = ["EleutherAI/pythia-410m", "EleutherAI/pythia-1b"]
 CKPT_DIR = "attr_ckpts_v2"
 RANK, STEPS, BS, SEQ, LR, CACHE_CH = 8, 250, 8, 128, 1e-4, 6
 DEV = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+if DEV.startswith("cuda"):
+    _cap = torch.cuda.get_device_capability(0)
+    if _cap < (7, 0):
+        raise SystemExit(
+            f"GPU {torch.cuda.get_device_name(0)} (sm_{_cap[0]}{_cap[1]}) is not supported "
+            f"by this PyTorch build (needs sm_70+): Kaggle assigned a P100. "
+            f"Fix: notebook Settings -> Accelerator -> 'GPU T4 x2', then rerun.")
 T0 = time.time()
 def log(m): print(f"[{time.time()-T0:7.1f}s] {m}", flush=True)
 
