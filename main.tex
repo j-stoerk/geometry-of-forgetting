@@ -237,6 +237,28 @@ merging and the distortion floor. NTK-based analyses \cite{doan2021,bennani2020}
 likewise relate forgetting to overlap in representation space, but do not develop the
 $\Sig$-orthogonality criterion or the associated transfer gate.
 
+\paragraph{The averaged Jacobian as a shared object with interpretability.} A
+convergent notion of geometry appears in mechanistic interpretability. The Jacobian
+lens of Gurnee, Lindsey, et al.~\cite{gurnee2026gws} characterizes a residual-stream activation by its
+\emph{context-averaged} forward Jacobian $J_\ell=\mathbb{E}[\partial h_{\mathrm{final}}/
+\partial h_\ell]$ composed with the unembedding, and identifies the low-rank span of its
+active readout directions---the ``J-space''---as the subspace of \emph{verbalizable}
+representations, limited in capacity and competitively occupied, a language-model global
+workspace. Our interference geometry is the learning-dynamics counterpart of the same
+move: where the J-lens averages the forward activation$\to$output Jacobian, we average
+the Gauss--Newton curvature $\Sig_A=\mathbb{E}[J_wJ_w^\top]$ (Sec.~\ref{sec:theory:general}),
+and both replace a single-point Jacobian with a distribution-averaged one for the same
+stated reason---to isolate an architecture-level invariant from context-specific use.
+The two induce the same partition of representation space: their causally load-bearing
+J-space plays the role of our $\range\Sig_A$ (perturbations there change outputs and
+incur forgetting), and the inert complement that their coordinate-patching ``leaves
+unchanged'' is our $\ker\Sig_A$ (free directions). Read this way, our interference
+energy and distortion floor supply a quantitative model of workspace \emph{competition}
+and our occupied-rank capacity knee a rate--distortion account of its \emph{limited
+capacity}; conversely, the released lens is a ready estimator of the averaged-Jacobian
+subspace our method tracks at scale. We make the connection testable in
+Sec.~\ref{sec:discussion}.
+
 \paragraph{Model merging and task arithmetic.} In a parallel line of literature,
 independently fine-tuned are
 combined into a single model that retains useful knowledge from each task
@@ -1299,6 +1321,23 @@ adaptive rule is the Pareto point, strictly dominating every zero-resource fixed
 and matching replay's retention at a fraction of its memory (runnable in
 \texttt{demo\_method\_taxonomy.py}, with the metric set and decision rules released as a
 standalone interference-ledger toolkit).
+
+\paragraph{A testable bridge to the verbalizable workspace.} The convergence with the
+Jacobian lens (Sec.~\ref{sec:related}) yields a falsifiable prediction rather than only
+an analogy. If our $\range\Sig_A$ and the lens's J-space are the same functional
+subspace, then forgetting must be \emph{verbalizable-subspace-mediated}: the readout
+change $\Del f$ that a later task induces on task $A$ should carry its interference
+energy inside $A$'s J-space, and protecting that subspace should prevent forgetting as
+effectively as protecting $\Sig_A$'s own eigen-subspace. We sketch the experiment
+(\texttt{kaggle\_jspace\_interference.py}) on a frozen \texttt{pythia-410m}: fit or load
+the released lens to obtain the J-space projector $P_J$ at a readout layer, learn the
+four-domain stream with a low-rank head, and (i) decompose the measured forgetting of
+domain $A$ into its $P_J$ and orthogonal parts, and (ii) compare naive learning against
+gating the update off $P_J$, off $\Sig_A$'s top subspace, and off a random subspace of
+equal rank. The interference geometry predicts a J-space energy fraction far above the
+$r/d$ random baseline in (i), and \emph{protect-J-space} $\approx$ \emph{protect-}$\Sig$
+$\ll$ \emph{naive} with \emph{protect-random} $\approx$ \emph{naive} in (ii)---a
+specificity control that would establish the two averaged-Jacobian subspaces as one.
 
 Several algorithmic refinements---a self-calibrating threshold, low-cost $\mathcal{O}(rd)$
 online curvature via Frequent Directions
@@ -2721,6 +2760,10 @@ tasks, \textit{arXiv}, 2025.
 
 \bibitem{liberty2013} E.~Liberty, Simple and deterministic matrix sketching (Frequent
 Directions), \textit{KDD}, 2013.
+
+\bibitem{gurnee2026gws} W.~Gurnee, J.~Lindsey, et al., Verbalizable representations form a
+global workspace in language models, \textit{Transformer Circuits Thread}, Anthropic,
+2026. Code: \texttt{github.com/anthropics/jacobian-lens}.
 
 \end{thebibliography}
 
