@@ -446,3 +446,97 @@ def constraints_from_tasks(bases: List[np.ndarray], B_new: Optional[np.ndarray] 
                 continue                                   # aligned -> shared
         keep.append(B)
     return np.hstack(keep) if keep else np.zeros((bases[0].shape[0], 0))
+
+
+# ---------------------------------------------------------------------
+#  AutonomousController (evaluate_autonomous_cl.py): boundary-free, label-
+#  free continual learning.  Real streams have no task resets, so this
+#  detects task shifts, rejects OOD, consolidates protected anchors, and
+#  gates updates -- all from the geometry the ledger already tracks.  It
+#  matches an oracle that IS given the boundaries on clean streams,
+#  rejects OOD on noisy streams, and degrades gracefully under gradual
+#  drift.  Backbone/adapter-agnostic: feed it per-batch feature rows and
+#  a step callback; it decides skip / consolidate / gate.
+# ---------------------------------------------------------------------
+@dataclass
+class AutoDecision:
+    event: str                 # 'adapt' | 'ood_skip' | 'boundary' | 'seed'
+    protect: np.ndarray        # (d, k) orthonormal protect basis for the gated step (may be empty)
+    n_anchors: int
+    novelty: float
+
+
+class AutonomousController:
+    """Two label-free signals drive it: novelty PERSISTENCE (a novel batch is
+    held; persisting `persist` steps => new task, consolidate old + adapt new;
+    subsiding => OOD, dropped) and working-subspace DRIFT away from the last
+    consolidation (catches gradual shifts).  Anchors are capped (bounded cost)."""
+    def __init__(self, dim: int, rank: int = 4, tau_ood: float = 0.55,
+                 persist: int = 3, th_drift: float = 0.42, th_low: float = 0.2,
+                 cap: int = 8, decay: float = 0.5):
+        self.d, self.r = dim, rank
+        self.tau_ood, self.persist = tau_ood, persist
+        self.th_drift, self.th_low, self.cap, self.gamma = th_drift, th_low, cap, decay
+        self.C = np.zeros((dim, dim))                 # working-subspace tracker
+        self.anchors: List = []                       # consolidated protected subspaces
+        self.Q = np.zeros((dim, 0))                   # orthonormal protect basis
+        self.anchor_sub: Optional[np.ndarray] = None
+        self.pending: List = []
+        self.n_seen = 0
+
+    def _work(self):
+        return _top_r_cov(self.C, self.r) if np.trace(self.C) > 1e-9 else np.zeros((self.d, 0))
+
+    def _novelty(self, Phi):
+        W = self._work()
+        if W.shape[1] == 0: return 1.0
+        return float(1.0 - np.square(Phi @ W).sum() / (np.square(Phi).sum() + 1e-12))
+
+    def _consolidate(self, B):
+        self.anchors.append(B)
+        if len(self.anchors) > self.cap:              # merge closest pair -> bounded cost
+            best, bi, bj = -1.0, 0, 1
+            for a in range(len(self.anchors)):
+                for b in range(a + 1, len(self.anchors)):
+                    o = principal_overlap(self.anchors[a], self.anchors[b])
+                    if o > best: best, bi, bj = o, a, b
+            U = _top_r_cov(self.anchors[bi] @ self.anchors[bi].T
+                           + self.anchors[bj] @ self.anchors[bj].T, self.r)
+            self.anchors[bi] = U; self.anchors.pop(bj)
+        M = np.hstack(self.anchors)
+        self.Q = np.linalg.qr(M)[0][:, :min(M.shape[1], self.d)]
+
+    def observe(self, Phi: np.ndarray) -> AutoDecision:
+        """Feed the next batch's feature rows; returns the action and the
+        protect basis to use for this step (empty => unconstrained)."""
+        Phi = np.atleast_2d(np.asarray(Phi, float)); self.n_seen += 1
+        seeded = np.trace(self.C) > 1e-6
+        nov = self._novelty(Phi)
+        if seeded and nov > self.tau_ood:             # novel -> hold pending
+            self.pending.append(Phi)
+            if len(self.pending) >= self.persist:     # persisted -> new task
+                if self.anchor_sub is not None: self._consolidate(self.anchor_sub)
+                self.C = np.zeros((self.d, self.d))
+                for P in self.pending: self._track(P)
+                self.anchor_sub, self.pending = self._work(), []
+                return AutoDecision("boundary", self.Q, len(self.anchors), nov)
+            return AutoDecision("ood_skip", self.Q, len(self.anchors), nov)
+        self.pending = []                             # subsided -> the blip was OOD
+        W = self._work()
+        if self.anchor_sub is None and seeded:
+            self.anchor_sub = W
+            self._track(Phi); return AutoDecision("seed", self.Q, len(self.anchors), nov)
+        if self.anchor_sub is not None and (1.0 - principal_overlap(W, self.anchor_sub)) > self.th_drift:
+            self._consolidate(self.anchor_sub); self.anchor_sub = W
+            self._track(Phi); return AutoDecision("boundary", self.Q, len(self.anchors), nov)
+        self._track(Phi)
+        return AutoDecision("adapt", self.Q, len(self.anchors), nov)
+
+    def _track(self, Phi):
+        S = Phi.T @ Phi / max(len(Phi), 1)
+        self.C = self.gamma * self.C + S / (np.trace(S) + 1e-9)
+
+
+def _top_r_cov(C: np.ndarray, r: int) -> np.ndarray:
+    w, V = np.linalg.eigh(C)
+    return V[:, -r:] if r > 0 else V[:, :0]

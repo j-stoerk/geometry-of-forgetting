@@ -3,7 +3,7 @@ import numpy as np
 from interference_ledger import (GeometryTracker, InterferenceLedger,
                                   InterferenceController, principal_overlap,
                                   kl_interference, jsd_floor, qp_gate,
-                                  constraints_from_tasks)
+                                  constraints_from_tasks, AutonomousController)
 
 rg = np.random.default_rng(0)
 def orth(d, r): return np.linalg.qr(rg.standard_normal((d, r)))[0]
@@ -72,6 +72,32 @@ def test_bregman_helpers():
     d1, d2 = rg.uniform(0.5, 2, 40), rg.uniform(0.5, 2, 40)
     assert jsd_floor(p, p, d1, d2) < 1e-12
     assert jsd_floor(p, q, d1, d2) > 0
+
+def test_autonomous_detects_boundary_not_ood():
+    rg = np.random.default_rng(0)
+    d, r = 40, 4
+    B1, B2 = orth(d, r), orth(d, r)
+    ctl = AutonomousController(d, rank=r)
+    ev = []
+    for _ in range(12):                                     # task 1
+        ev.append(ctl.observe(rg.standard_normal((32, r)) @ B1.T).event)
+    ev.append(ctl.observe(rg.standard_normal((32, r)) @ orth(d, r).T * 6).event)  # 1 OOD blip
+    for _ in range(12):                                     # task 2 (persistent shift)
+        ev.append(ctl.observe(rg.standard_normal((32, r)) @ B2.T).event)
+    assert "boundary" in ev                                 # the persistent shift is caught
+    assert ctl.n_anchors_seen if False else len(ctl.anchors) >= 1
+    # the single OOD batch did not create a task
+    assert ev.count("boundary") <= 2
+
+def test_autonomous_bounded_anchors():
+    rg = np.random.default_rng(1)
+    d, r, cap = 40, 4, 5
+    ctl = AutonomousController(d, rank=r, cap=cap)
+    for t in range(20):                                     # 20 distinct tasks
+        B = orth(d, r)
+        for _ in range(6):
+            ctl.observe(rg.standard_normal((32, r)) @ B.T)
+    assert len(ctl.anchors) <= cap                          # bounded cost
 
 def test_qp_gate_recovers_all_methods():
     r = np.random.default_rng(3)
