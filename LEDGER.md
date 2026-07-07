@@ -41,6 +41,14 @@ memorized noise — `NOTE_benign_forgetting.md`), and estimates too uncertain to
 act on trigger **defer** (bias-corrected floors + null test —
 `evaluate_floor_estimation.py`).
 
+**Reversing one row gives certified unlearning**: ascend the forget set's
+validated loss under the same retained constraints, stop at the never-trained
+reference, and *measure* the certificate `E_retain[KL(p_before‖p_after)] ≤ ε`.
+Memorized content unlearns free; entangled knowledge has a closed-form
+**unlearning floor** (validated to 3e-7) — you either stall short of the
+reference or pay exactly that much retained damage
+(`evaluate_unlearning.py`; LLM protocol: `kaggle_unlearn_domain.py`).
+
 ### One loop: measure → attribute → act
 
 | step | what happens | remedy per attributed term |
