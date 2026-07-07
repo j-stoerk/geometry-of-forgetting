@@ -1337,17 +1337,20 @@ gating the update off $P_J$, off $\Sig_A$'s top subspace, and off a random subsp
 equal rank. The interference geometry predicts a J-space energy fraction far above the
 $r/d$ random baseline in (i), and \emph{protect-J-space} $\approx$ \emph{protect-}$\Sig$
 $\ll$ \emph{naive} with \emph{protect-random} $\approx$ \emph{naive} in (ii)---a
-specificity control that would establish the two averaged-Jacobian subspaces as one. A
-first probe (frozen \texttt{pythia-410m}, layer $16$, rank $64$) is correlationally
-suggestive but not yet causally decisive: the J-space and the $\Sig_A$ subspace overlap
-at roughly twice the random baseline (mean squared principal cosine $0.12$ versus
-$0.06$), and the induced output-space (KL) interference on $A$ is enriched in J-space by
-$2.4\times$ over the $r/d$ baseline ($14.6\%$ versus $6.2\%$). The intervention (ii),
-however, was under-powered here: no rank-$64$ projection meaningfully reduced
-forgetting---including $\Sig_A$'s own subspace ($6\%$)---because at this middle layer the
-interference is high-effective-rank, so low-rank protection cannot discriminate. A
-decisive causal test requires a regime where low-rank protection is effective (a layer
-and rank below the capacity knee); we leave it open.
+specificity control that would establish the two averaged-Jacobian subspaces as one.
+Measuring both on a frozen \texttt{pythia-410m} resolves the relationship into a
+\emph{component} rather than an identity (\texttt{kaggle\_jspace\_layers.py}). The strong
+form fails: the interference $\Sig_A=\mathbb{E}[gg^\top]$ is high-effective-rank at every
+layer---$80\%$ of its energy needs at least $285$ of $1024$ dimensions---so a
+workspace-sized subspace cannot carry the bulk of forgetting, which is also why no
+low-rank projection protects in (ii), $\Sig_A$'s own top subspace included. But the
+enrichment is real and, tellingly, grows toward the readout: the J-space carries $1.3$ to
+$2.5\times$ its dimensional share of interference energy across layers $2$ to $22$
+(enriched at every layer probed; correlation with depth $0.86$), and its overlap with
+$\Sig_A$'s leading subspace rises from $0.05$ to $0.15$ against a $0.03$ chance baseline.
+The verbalizable directions are thus systematically over-represented in the forgetting
+geometry---increasingly so where representations become more readable---without being
+identical to it, a measured link between what a model can say and what it can lose.
 
 Several algorithmic refinements---a self-calibrating threshold, low-cost $\mathcal{O}(rd)$
 online curvature via Frequent Directions
