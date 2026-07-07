@@ -2212,6 +2212,47 @@ since a smooth shift is unobservable until it accumulates. The exact-regime synt
 demonstration leaves a real unlabeled language stream open, but the operating assumption
 of known boundaries is, in this regime, removed rather than merely gestured at.
 
+\paragraph{Boundary-free continual learning as a memory-metric flow.} The controller
+above still carries thresholds (a novelty cutoff, a persistence count, a drift
+threshold). A differential-geometric reformulation removes them entirely, deriving
+autonomous operation from the geometry rather than imposing it. Drop the notion of a task:
+a continuous data path $\mathcal D_t$ induces an instantaneous Gauss--Newton metric
+$G_t=\mathbb{E}_{x\sim\mathcal D_t}[\nabla f\nabla f^\top]$, accumulated into a leaky
+\emph{memory metric} $\dot M_t=G_t-\lambda M_t$, and learning is the
+\emph{memory-natural-gradient flow}
+\begin{equation}
+\dot\theta=-(M_t+\varepsilon I)^{-1}\nabla L_t.
+\label{eq:memflow}
+\end{equation}
+Fresh directions (small $M$-eigenvalue) learn at rate $\approx\!\eta$; occupied
+directions (eigenvalue $s$, i.e.\ past experience) are damped by $\varepsilon/(\varepsilon+s)$,
+so Eq.~\eqref{eq:memflow} is the graded, boundary-free generalization of the projection
+gate, of which the hard gate $(I-QQ^\top)$ is the $\varepsilon\!\to\!0$ spectral limit. Past
+losses become \emph{adiabatic invariants}: for any past slice $A$, the chain rule gives
+exactly $dL_A/dt=-\nabla L_A^\top(M_t+\varepsilon I)^{-1}\nabla L_t$, which is $0$ when the
+current gradient is fresh with respect to $A$ ($\Sig_t\Sig_A=0$; verified to $4\times
+10^{-16}$) and otherwise the interference measured in the $M^{-1}$ inner
+product---the continuous form of $\tfrac12\Del^\top\Sig_A\Del$. This framing is the
+learning-dynamics counterpart of energy-conserving reduced-order models on structure-
+preserving submanifolds \cite{friedl2026hamiltonian}. Four properties are validated
+(\texttt{evaluate\_memory\_metric\_flow.py}). \emph{(i)} On a continuously drifting stream
+with no boundaries, the flow drives a probe's loss down and then \emph{holds it flat}
+($0.52\!\to\!0.05\!\to\!0.08$ across five later regimes) while naive learning loses it
+($\to0.63$). \emph{(ii)} It beats naive on gradual, sharp, and noisy streams uniformly,
+with no per-regime special-casing (retained loss $0.25$/$0.12$/$0.26$ versus
+$0.76$/$0.22$/$0.94$; ten seeds), and beats hard-gating every past subspace ($1.67$),
+which over-constrains overlapping tasks the soft flow trades off. \emph{(iii)} The single
+leak $\lambda$ is a principled retention--plasticity control: plasticity rises
+monotonically with $\lambda$ while retention is optimized at an interior value where the
+memory timescale $1/\lambda$ matches the drift rate. \emph{(iv)} A reduced-order metric
+(top-$r$ eigenspace with a Woodbury inverse) reproduces the full flow at
+$\mathcal O(dr)$ cost ($|{\rm diff}|=0.02$)---the structure-preserving low-dimensional
+submanifold carries the whole dynamics. Boundary detection, OOD rejection (a transient
+adds a decaying rank-one term to $M$), capacity (the spectrum of $M$, released by
+$\lambda$), and gating thus collapse into one object; the flow is
+natural-gradient/K-FAC-shaped, so the path to deep networks is a running
+Kronecker-factored $M$.
+
 \paragraph{Multimodal interference is block-structured.} For a joint embedding
 $\phi=[\phi_v,\phi_l]$, the second moment $\Sig_A$ partitions into intra-modal blocks
 $\Sig_v,\Sig_l$ and a cross-modal block $\Sig_{vl}$, and the interference energy
@@ -2820,6 +2861,10 @@ Directions), \textit{KDD}, 2013.
 \bibitem{gurnee2026gws} W.~Gurnee, J.~Lindsey, et al., Verbalizable representations form a
 global workspace in language models, \textit{Transformer Circuits Thread}, Anthropic,
 2026. Code: \texttt{github.com/anthropics/jacobian-lens}.
+
+\bibitem{friedl2026hamiltonian} K.~Friedl, N.~Jaquier, A.~Liao, D.~Kragic, Learning
+Hamiltonian dynamics at scale: a differential-geometric approach, \textit{ICML} (PMLR
+306), 2026.
 
 \end{thebibliography}
 
