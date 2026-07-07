@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-SCRIPT_VERSION = "memflow-deep-exact-logged-v2-maskedTIL-tracenorm"
+SCRIPT_VERSION = "memflow-deep-exact-logged-v3-protective"
 DEV = "cuda:0" if torch.cuda.is_available() else "cpu"
 if DEV.startswith("cuda") and torch.cuda.get_device_capability(0) < (7, 0):
     raise SystemExit("Unsupported GPU (sm<70): set Accelerator to 'GPU T4 x2'.")
@@ -538,15 +538,21 @@ class KFACAnchorMetric:
             "layer_summary": self._factor_layer_summary(new_A, new_G),
         })
 
+    # PROTECTIVE damping preconditioner  eps (M+eps I)^{-1} = I - U diag(s/(eps+s)) U^T.
+    # NOT the natural-gradient inverse (M+eps I)^{-1} = that/eps, which amplifies fresh
+    # directions by 1/eps and turns the flow into an ACCELERATOR (great plasticity, but
+    # it thrashes the shared backbone -> worse retention than naive).  The linear memory
+    # flow multiplied by lr*eps to cancel the 1/eps; here we bake the eps-scaling in, so
+    # fresh directions (s~0) keep rate 1 and occupied ones (s>>eps) are damped ~eps/s.
     def _apply_inv_right(self, X: torch.Tensor, eig: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         U, s = eig
         coef = s / (self.eps + s)
-        return (X - ((X @ U) * coef) @ U.T) / self.eps
+        return X - ((X @ U) * coef) @ U.T
 
     def _apply_inv_left(self, X: torch.Tensor, eig: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         U, s = eig
         coef = s / (self.eps + s)
-        return (X - U @ ((U.T @ X) * coef[:, None])) / self.eps
+        return X - U @ ((U.T @ X) * coef[:, None])
 
     @torch.no_grad()
     def precondition(self) -> None:
