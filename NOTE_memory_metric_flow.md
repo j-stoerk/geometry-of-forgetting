@@ -67,6 +67,8 @@ blocks (now high-eigenvalue) are damped.
 Supersedes the heuristic autonomous controller (novelty/drift thresholds, persistence
 counters, anchor snapshots): all of it collapses into `θ̇ = −(M+εI)⁻¹∇L`, `dM = G−λM`.
 Boundaries, OOD (a transient adds a decaying rank-1 to `M`), capacity (M's spectrum,
-released by `λ`), and gating are one object.  Open: exact-regime / linear-features here;
-a deep-network and real-stream instantiation (the flow is natural-gradient/K-FAC-shaped,
-so `M` is a running Kronecker-factored second moment) is the next step.
+released by `λ`), and gating are one object.  Open: exact-regime / linear-features here.
+The deep-network K-FAC lift (a running Kronecker-factored `M`) was built and run and is a
+**negative result** -- with shared features the occupied subspace is the shared trunk, so
+the preconditioner either freezes learning or fails to protect, and EWC beats it. See
+[`NOTE_memflow_deepnet_negative.md`](NOTE_memflow_deepnet_negative.md).

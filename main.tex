@@ -2250,9 +2250,51 @@ memory timescale $1/\lambda$ matches the drift rate. \emph{(iv)} A reduced-order
 $\mathcal O(dr)$ cost ($|{\rm diff}|=0.02$)---the structure-preserving low-dimensional
 submanifold carries the whole dynamics. Boundary detection, OOD rejection (a transient
 adds a decaying rank-one term to $M$), capacity (the spectrum of $M$, released by
-$\lambda$), and gating thus collapse into one object; the flow is
-natural-gradient/K-FAC-shaped, so the path to deep networks is a running
-Kronecker-factored $M$.
+$\lambda$), and gating thus collapse into one object. The flow is
+natural-gradient/K-FAC-shaped, but lifting it to a deep network as a running
+Kronecker-factored preconditioner \emph{fails} (\texttt{kaggle\_memory\_flow\_deepnet.py};
+10-task Split-CIFAR-100, single seed). Swept over $\varepsilon\in\{0.3,1,3,10\}$, the
+preconditioned flow either freezes after the first task or forgets like naive and never
+protects a past task, reaching $0.19$ average accuracy at best against $0.25$ for a plain
+EWC penalty (naive $0.15$); EWC alone holds old-task accuracy above the chance floor. The
+obstruction is geometric: the top Kronecker directions carry $\approx\!99\%$ of each
+layer's factor trace and coincide with the shared low-level features, so the occupied
+subspace \emph{is} the trunk that every later task reuses, and damping it removes
+plasticity instead of isolating interference. A preconditioner on a shared metric cannot
+separate the two; reaching depth needs a penalty formulation (the memory metric as $F$)
+or genuinely task-specific subspaces.
+
+\paragraph{Plasticity preservation: gating meets dynamical isometry.} Interference gating
+decides \emph{where} an update may act but does not keep the allowed directions
+\emph{learnable}: under sustained non-stationarity a network also loses plasticity as its
+layer Jacobians drift from isometry and the empirical NTK grows anisotropic
+\cite{rosseau2026isometry}. The failures are complementary, and pairing \IGFA{} with a
+dynamical-isometry regularizer---driving each weight matrix toward orthogonality,
+$R_{\mathrm{iso}}(W)=\|W^\top W-I\|_F^2$ (closed-form gradient $4W(W^\top W-I)$, no SVD), as
+a decoupled AdamO step \cite{rosseau2026isometry}---is \emph{super-additive}. On a
+$20$-task Split-CIFAR-100 stream with a deeper unnormalized ReLU network (orthogonal init,
+task-IL masking; three seeds; \texttt{kaggle\_isometry\_igfa\_hybrid.py}), isometry alone
+adds $+0.033$ average accuracy over naive and the gate alone $+0.071$, but together they
+reach $0.555\pm0.034$ against a $0.331$ additive prediction---a synergy of $+0.224$, and
+$2.4\times$ naive. The gate supplies retention (old-task accuracy $\sim\!0.5$ versus
+naive's $\sim\!0.15$) at preserved learning while isometry supplies plasticity (learning
+$0.78$, drift pinned, dead ReLUs revived); the result replicates on a harder per-task
+pixel-permuted stream ($0.425\pm0.011$ versus naive $0.215$), with the same ordering. Two
+mechanisms account for it. The gate must carry the correct sign---it acts only when a step
+would raise a past loss ($\langle g,g_A\rangle<0$) and passes beneficial transfer
+($\langle g,g_A\rangle>0$), firing on the genuine-conflict minority of steps rather than
+stripping the shared learning signal that dominates a shared-feature network. And isometry
+makes gating \emph{cheap}: the per-step cost $\|g-\tilde g\|/\|g\|$, the fraction of the
+gradient the projection removes, falls $39$--$43\%$ once isometry is added---consistently
+across mixed-aggregate (A-GEM) and per-task (GEM) gates and both streams---because in the
+high-rank isometric representation the conflicting component is a smaller share of the
+update, so protecting the past costs less of the present. A corollary: the sharper
+per-task gate \emph{requires} isometry, since alone it collapses the representation to rank
+$\sim\!1$ and underperforms the aggregate gate, but with isometry holding effective rank
+high ($25$ versus $5.6$) it becomes the strongest protector. The claim is
+comparative---absolute accuracies are low for a small unnormalized network on hard
+task-IL---but the ordering and the cost mechanism are stable across three seeds and two
+streams.
 
 \paragraph{Multimodal interference is block-structured.} For a joint embedding
 $\phi=[\phi_v,\phi_l]$, the second moment $\Sig_A$ partitions into intra-modal blocks
@@ -2866,6 +2908,10 @@ global workspace in language models, \textit{Transformer Circuits Thread}, Anthr
 \bibitem{friedl2026hamiltonian} K.~Friedl, N.~Jaquier, A.~Liao, D.~Kragic, Learning
 Hamiltonian dynamics at scale: a differential-geometric approach, \textit{ICML} (PMLR
 306), 2026.
+
+\bibitem{rosseau2026isometry} A.~Rosseau, R.~M\"uller, A.~Now\'e, Preserving plasticity in
+continual learning via dynamical isometry, \textit{ICML} (PMLR 306), 2026.
+\texttt{arXiv:2606.09762}.
 
 \end{thebibliography}
 
