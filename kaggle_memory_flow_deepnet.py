@@ -940,11 +940,14 @@ def parse_args():
     p.add_argument("--grad-clip", type=float, default=5.0)
     p.add_argument("--ewc-lambda", type=float, default=40.0)
     p.add_argument("--seeds", type=int, nargs="+", default=[0])
-    # ONE run gets the plasticity<->retention curve: sweep eps for the protective
-    # methods (larger eps damps only the MOST occupied directions -> more plasticity).
-    p.add_argument("--eps-sweep", type=float, nargs="*", default=None,
-                   help="e.g. --eps-sweep 0.3 1 3 10 : runs exact-functional/-transport "
-                        "at each eps (plus naive/ewc once) instead of the default 5 methods.")
+    # DEFAULT behaviour (Kaggle runs the file with no args): sweep eps for the
+    # protective methods to trace the plasticity<->retention frontier in one run
+    # (larger eps damps only the MOST occupied directions -> more plasticity).
+    # Override with your own values (--eps-sweep 0.5 2), or pass --eps-sweep with
+    # NO values to fall back to the fixed 5-method comparison at --eps.
+    p.add_argument("--eps-sweep", type=float, nargs="*", default=[0.3, 1.0, 3.0, 10.0],
+                   help="eps values for exact-functional/-transport (naive/ewc run once). "
+                        "Default 0.3 1 3 10.  Pass with no values to disable the sweep.")
     args, unknown = p.parse_known_args()
     return args
 
