@@ -1273,7 +1273,7 @@ constraints, exhausts capacity, and eventually damages the representation itself
 natural fix follows from Theorem~\ref{thm:general}: the relevant metric is the curvature
 along the trajectory, and its online surrogate is the recursive Gauss--Newton estimate,
 which continually realigns the protected subspace with the current geometry and keeps its
-effective rank bounded---the capacity-exhaustion mechanism demonstrated directly in
+effective rank bounded---the capacity-exhaustion mechanism shown directly in
 Sec.~\ref{sec:exp:drift}. Preliminary language-model results suggest that the retention
 mechanism transfers, while the right similarity signal for language remains open
 (Sec.~\ref{si:llm}).
@@ -1287,13 +1287,13 @@ theorem-backed answer---the threshold-free functional gate of Sec.~\ref{si:beyon
 reads the measured interference rate instead of any modality-specific similarity signal,
 carries a continuous-time monotone-retention guarantee, and delivers a significant,
 threshold-free real-text gain over naive continual fine-tuning on a four-domain LoRA
-stream, with parity-to-slight-edge over unconditional protection (Sec.~\ref{si:llm}). To validate the broad applicability of this framework, several extensions are detailed in
-the Supporting Information. First, we demonstrate sequential LoRA fine-tuning on language
+stream, with parity-to-slight-edge over unconditional protection (Sec.~\ref{si:llm}). Several extensions are detailed in
+the Supporting Information. First, we show sequential LoRA fine-tuning on language
 models at scale (Sec.~\ref{si:llm}), using recursive Gauss--Newton tracking on the adapting
 features together with a modality-appropriate similarity gate for language. Second, the
 frozen-backbone evaluation on Split-CIFAR-100, ImageNet-R, and CUB appears in the main text
 over five seeds (Sec.~\ref{sec:exp:cifar}), comparing the retention--transfer tradeoff
-against \OGD{}/\textsc{gpm}, EWC, and replay in the exact A1 regime. Third, we establish
+against \OGD{}/\textsc{gpm}, EWC, and replay in the exact A1 regime. Third, we present
 overlay-native continual pretraining at the billion-parameter scale (Sec.~\ref{si:pretrain}),
 where replay-free and Fisher-free operations are most valuable and where the capacity budget
 of Sec.~\ref{sec:exp:simcap} predicts the model-size-versus-rehearsal tradeoff directly.
@@ -1797,8 +1797,8 @@ gate significantly improves on naive on both axes---average final loss
 $3.981\pm0.002$ against $4.001\pm0.006$ (paired $p=0.003$, five of five seeds), forgetting
 $+0.294\pm0.005$ against $+0.324$ ($p=0.0007$)---and on the input gate by a similar margin,
 while edging unconditional protection (protect-all $3.984$/$+0.300$) consistently but
-\emph{not} significantly at five seeds ($p\approx0.19$--$0.23$). Two honest negatives
-sharpen the reading. First, the earlier three-seed advantage over protect-all does not
+\emph{not} significantly at five seeds ($p\approx0.19$--$0.23$). Two checks come
+back negative. First, the earlier three-seed advantage over protect-all does not
 survive to five seeds as a significant effect; the robust claim is a significant win over
 naive and the input gate, and parity-to-slight-edge over protect-all. Second, making the
 sign test Adam-aware---projecting the \emph{preconditioned} update
@@ -1808,8 +1808,9 @@ limiting factor on the modest margins. The measured interference-rate map noneth
 locates the mechanism: news$\leftrightarrow$IMDB and tweets$\leftrightarrow$IMDB carry
 positive transfer ($+0.07$, $+0.06$) that protect-all forfeits, while wikitext conflicts
 with IMDB ($-0.03$), which naive and the input gate pay for. The margins are modest at
-this scale---the honest headline is a significant, threshold-free, input-geometry-free win
-over naive continual fine-tuning, with the mechanism the theory prescribes.
+this scale, but the gate still improves significantly on naive continual fine-tuning
+using only the sign of the gradient inner product, with no similarity threshold and no
+input-space geometry.
 
 The result replicates at four times the scale on a second architecture. On
 \texttt{pythia-410m} (gpt-neox, sequential LoRA on the same four-domain stream, three
@@ -1825,7 +1826,7 @@ tied within $0.01$---a vacuous comparison. The gate has value only where interfe
 exists, which is precisely the pre-flight feasibility point: measure whether the stream
 forgets before deploying---or crediting---any mitigation.
 
-A vision test of the same gate scopes it honestly (five seeds per stream;
+A vision test of the same gate confirms it fires only when head gradients overlap (five seeds per stream;
 \texttt{kaggle\_sign\_gate\_vit.py}, \texttt{sign\_gate\_vit\_results.json}). On the
 masked task-incremental ViT streams (Split-CIFAR-100, ImageNet-R, CUB) the gate is
 \emph{exactly} inert: with class masks, the current and stored tasks' gradients occupy
@@ -2510,10 +2511,10 @@ update, two Gauss--Newton corrector steps on the anchor residuals restore it. Me
 jointly trained networks, anchor-set forgetting sits at numerical zero
 ($\sim10^{-14}$) \emph{independent of step size}, where projection alone leaks $O(\eta)$
 ($0.17$, $0.043$, $0.0015$ at $\eta=0.1,0.05,0.02$), while the new task still trains.
-The honest boundary of the result is statistical rather than optimizational: exactness
-holds on the anchors, and held-out $A$-loss is governed by how well the anchor set pins
-the function class between anchors ($0.15$--$0.26$ here at $24$ anchors)---retention
-beyond A1 becomes a generalization question, not an optimizer question.
+The remaining limitation is one of coverage: exactness
+holds on the anchors, and between them the held-out $A$-loss depends on how well the anchor
+set pins the function class ($0.15$--$0.26$ here at $24$ anchors). Beyond A1, retention
+is governed by how densely the anchors sample the function class.
 
 \paragraph{Monotone-retention gating: the threshold-free gate.} The path integral also
 yields the gate itself, with the similarity threshold removed. Since
@@ -2563,8 +2564,8 @@ $\|v^\ast-u\|\le\|v_{\mathrm{proj}}-u\|$ always.
 substituting back turns the dual into the stated nonnegative least squares, whose
 Karush--Kuhn--Tucker conditions are precisely primal feasibility and complementary
 slackness. The gate therefore interpolates between naive sharing and subspace projection
-through the active set, and unconditional projection is the special case in which the
-inequality constraints are hardened to equalities---never better in the exact regime. All
+through the active set. Unconditional projection hardens those inequality constraints to
+equalities, which in the exact regime never improves on the gate. All
 statements are machine-checked ($\|v^\ast-v_{\mathrm{gate}}\|=0$ at $m=1$; feasibility to
 $10^{-15}$; measured protected-rate decrease under full activation;
 \texttt{evaluate\_functional\_control.py}).
@@ -2614,7 +2615,7 @@ the conditional mutual information between task identity and label---the exact
 label-entropy cost of hiding which task a sample came from. The entropy
 \emph{sandwich} of Theorem~\ref{thm:mi} (quadratic loss) thus closes to an equality
 under the loss language models train, removability becomes $Y\perp T\mid X$, and the
-floor is attained, not merely bounded: a trained shared softmax head converges to
+floor is achievable, and a trained shared softmax head converges to
 Eq.~\eqref{eq:infofloor} from above with terminal gap $6\times10^{-16}$
 (\texttt{evaluate\_info\_floor.py}; identity and mixture-optimality checks at
 $10^{-16}$). Operationally, the irreducible single-model floor of an LLM domain
