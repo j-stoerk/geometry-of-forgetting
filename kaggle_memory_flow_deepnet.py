@@ -940,6 +940,11 @@ def parse_args():
     p.add_argument("--grad-clip", type=float, default=5.0)
     p.add_argument("--ewc-lambda", type=float, default=40.0)
     p.add_argument("--seeds", type=int, nargs="+", default=[0])
+    # ONE run gets the plasticity<->retention curve: sweep eps for the protective
+    # methods (larger eps damps only the MOST occupied directions -> more plasticity).
+    p.add_argument("--eps-sweep", type=float, nargs="*", default=None,
+                   help="e.g. --eps-sweep 0.3 1 3 10 : runs exact-functional/-transport "
+                        "at each eps (plus naive/ewc once) instead of the default 5 methods.")
     args, unknown = p.parse_known_args()
     return args
 
@@ -951,15 +956,23 @@ if __name__ == "__main__":
     tr, te = get_split_cifar100(args.tasks, args.cpt)
     log(f"Split-CIFAR-100: {args.tasks} tasks x {args.cpt} classes", tasks=args.tasks, cpt=args.cpt)
 
-    methods = ["naive", "ewc", "exact-stale", "exact-transport", "exact-functional"]
+    if args.eps_sweep:                                     # eps curve for the protective methods
+        methods = ["naive", "ewc"]
+        for e in args.eps_sweep:
+            methods += [f"exact-functional@eps{e}", f"exact-transport@eps{e}"]
+    else:
+        methods = ["naive", "ewc", "exact-stale", "exact-transport", "exact-functional"]
     method_runs = {}
     method_summaries = {}
 
     for method in methods:
+        base = method.split("@eps")[0]                     # strip the eps tag (if any)
+        if "@eps" in method:
+            args.eps = float(method.split("@eps")[1])       # per-run eps for the sweep
         runs = []
         for seed in args.seeds:
-            log(f"START {method} seed={seed}", method=method, seed=seed)
-            run_record = run_one(method, tr, te, args, seed)
+            log(f"START {method} seed={seed} (eps={args.eps})", method=method, seed=seed, eps=args.eps)
+            run_record = run_one(base, tr, te, args, seed)
             runs.append(run_record)
             log(
                 f"END {method} seed={seed}: avg_acc={run_record['final_metrics']['avg_acc']:.3f} Omega={run_record['final_metrics']['omega']:+.3f}",
